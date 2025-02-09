@@ -50,7 +50,8 @@ config = dotenv_values(".env.development" if app.config["DEBUG"] else ".env")
 if not config["CLIENT_ID"] or not config["CLIENT_SECRET"]:
     sys.exit("Missing client ID or client secret, cannot start")
 
-user_auth = AuthManager(host=config.get("VALKEY_HOST", "localhost"))
+valkey_host = config.get("VALKEY_HOST", "localhost")
+user_auth = AuthManager(host=valkey_host if valkey_host else "localhost")
 
 datasource: DataSource = ESI(config["CLIENT_ID"], config["CLIENT_SECRET"])
 
@@ -63,13 +64,11 @@ if "vite" not in sys.argv:
 
     corp_id = CorpID(BaseID(int(_id)))
     contract_endpoints.corp_id = corp_id
+    contract_endpoints.create_valkey_client(valkey_host if valkey_host else "localhost")
     contracting_thread = threading.Thread(
         target=pull_contracts,
         name="Puller Thread",
-        args=(
-            datasource,
-            corp_id,
-        ),
+        args=(datasource, corp_id, valkey_host),
         daemon=True,
     )
     if not contracting_thread.is_alive():
@@ -88,6 +87,7 @@ def get_messages():
 # Shared data
 inertia.share("client_id", config["CLIENT_ID"])
 inertia.share("scopes", config["SCOPES"])
+inertia.share("redirect_uri", config["REDIRECT_URI"])
 inertia.share("current_user", get_current_user)
 inertia.share("messages", get_messages)
 
@@ -120,7 +120,7 @@ def login_endpoint():
 
     assert response.refresh_token
 
-    save_user(
+    user_auth.save_user(
         int(character_id),
         response.access_token,
         response.refresh_token,
@@ -140,7 +140,7 @@ def logout():
 
 @login.user_loader
 def load_user(user_id):
-    return get_user(user_id)
+    return user_auth.get_user(user_id)
 
 
 @app.route("/contracts")

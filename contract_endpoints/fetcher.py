@@ -16,13 +16,13 @@ from ..data.esi.esi import get_bulk_names, get_structure_names
 from ..data.typing import AccessToken, RefreshToken
 from .typing import *
 
-valkey_client = Valkey(host="valkey")
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def pull_contracts(esi: ESI, corp_id: CorpID):
+def pull_contracts(esi: ESI, corp_id: CorpID, valkey_host: str):
+    valkey_client = Valkey(host=valkey_host)
+
     while True:
         user: Any | None = valkey_client.srandmember("characters")
         if user:
@@ -31,10 +31,10 @@ def pull_contracts(esi: ESI, corp_id: CorpID):
             logger.info("Using user %d for contracts", user_id)
 
             logger.debug("Getting basic contract data for corp")
-            contracts = get_basic_contract_data(esi, user_id, corp_id)
+            contracts = get_basic_contract_data(esi, user_id, corp_id, valkey_client)
 
             logger.debug("Fetching names")
-            contracts = get_names(esi, contracts, user_id)
+            contracts = get_names(esi, contracts, user_id, valkey_client)
 
             contract_ids: list[ContractID] = [
                 ContractID(BaseID(contract["contract_id"]))
@@ -54,7 +54,7 @@ def pull_contracts(esi: ESI, corp_id: CorpID):
             logger.debug("Contracts to fetch items for: %s", str(missing_items))
             with valkey_client.pipeline() as pipeline:
                 for id in missing_items:
-                    access_token = get_key(esi, user_id)  # Reget key in case it expired
+                    access_token = get_key(esi, user_id, valkey_client)  # Reget key in case it expired
 
                     try:
                         logger.debug("Getting items for contract %d", id)
@@ -63,7 +63,7 @@ def pull_contracts(esi: ESI, corp_id: CorpID):
                         logger.error("ESI ERROR ON CONTRACT %d", id)
                         continue
 
-                    item_names = cached_lookup("names", "type_id", items, get_bulk_names)
+                    item_names = cached_lookup("names", "type_id", items, get_bulk_names, valkey_client)
                     [item.update({"name": item_names.get(item["type_id"], "Unknown")}) for item in items]
 
                     pipeline.set(
@@ -77,30 +77,32 @@ def pull_contracts(esi: ESI, corp_id: CorpID):
             time.sleep(300)
 
 
-def get_basic_contract_data(esi: ESI, user_id: UserID, corp_id: CorpID) -> list[ESIContract]:
-    access_token = get_key(esi, user_id)
+def get_basic_contract_data(esi: ESI, user_id: UserID, corp_id: CorpID, valkey_client: Valkey) -> list[ESIContract]:
+    access_token = get_key(esi, user_id, valkey_client)
     contracts = get_corp_contracts(corp_id, access_token)
     return contracts
 
 
-def get_names(esi: ESI, contracts: Sequence[ESIContract], user_id: UserID) -> Sequence[EnrichedContract]:
+def get_names(
+    esi: ESI, contracts: Sequence[ESIContract], user_id: UserID, valkey_client: Valkey
+) -> Sequence[EnrichedContract]:
     output: Sequence[EnrichedContract] = cast(Sequence[EnrichedContract], contracts)
 
-    issuer_names = cached_lookup("names", "issuer_id", contracts, get_bulk_names)
+    issuer_names = cached_lookup("names", "issuer_id", contracts, get_bulk_names, valkey_client)
     [
         contract.update({"issuer_name": issuer_names.get(BaseID(contract["issuer_id"]), "Unknown")})
         for contract in output
     ]
 
-    assignee_names = cached_lookup("names", "assignee_id", contracts, get_bulk_names)
+    assignee_names = cached_lookup("names", "assignee_id", contracts, get_bulk_names, valkey_client)
     [
         contract.update({"assignee_name": assignee_names.get(BaseID(contract["assignee_id"]), "Unknown")})
         for contract in output
     ]
 
-    access_token = get_key(esi, user_id)
+    access_token = get_key(esi, user_id, valkey_client)
     structure_names = cached_lookup(
-        "names", "start_location_id", contracts, lambda x: get_structure_names(x, access_token)
+        "names", "start_location_id", contracts, lambda x: get_structure_names(x, access_token), valkey_client
     )
     [
         contract.update({"location_name": structure_names.get(BaseID(contract["start_location_id"]), "Unknown")})
@@ -115,7 +117,7 @@ type LookupFunction = Callable[[list[BaseID]], dict[BaseID, str]]
 
 
 def cached_lookup(
-    prefix: str, attr: str, contracts: Sequence[ESIContract], lookup_func: LookupFunction
+    prefix: str, attr: str, contracts: Sequence[ESIContract], lookup_func: LookupFunction, valkey_client: Valkey
 ) -> dict[BaseID, str]:
     """Look up names for a set of IDs, caching the results in Valkey.
 
@@ -146,7 +148,7 @@ def cached_lookup(
     return output
 
 
-def get_key(esi: ESI, user_id: UserID) -> AccessToken:
+def get_key(esi: ESI, user_id: UserID, valkey_client: Valkey) -> AccessToken:
     """Get the access token for a user, refreshing it if necessary.
 
     :param esi: ESI object to user for refreshing token if needed

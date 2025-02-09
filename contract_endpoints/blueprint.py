@@ -10,13 +10,14 @@ from flask import Blueprint
 from .dataclasses import *
 from .typing import *
 
-valkey_client = valkey.Valkey(host="valkey")
-
 
 class ContractBlueprint(Blueprint):
     def __init__(self, name: str, import_name: str, corp_id: CorpID | None = None):
         super().__init__(name, import_name)
         self.corp_id = corp_id
+
+    def create_valkey_client(self, host: str) -> None:
+        self.valkey_client = valkey.Valkey(host=host)
 
 
 contract_endpoints = ContractBlueprint("contracts", __name__)
@@ -26,7 +27,8 @@ logger = logging.getLogger(__name__)
 
 # TODO: Make filters configurable
 def get_outstanding_contracts(corp_id: CorpID) -> list[Contract]:
-    contract_data: Any | None = valkey_client.get("contracts")
+    assert contract_endpoints.valkey_client is not None
+    contract_data: Any | None = contract_endpoints.valkey_client.get("contracts")
     contracts: List[Contract] = json.loads(contract_data, cls=ContractDecoder) if contract_data else []
     logger.debug("Parsed %d contracts out of Valkey", len(contracts))
 
@@ -41,7 +43,7 @@ def get_outstanding_contracts(corp_id: CorpID) -> list[Contract]:
     logger.debug("%d contracts remaining after filtering", len(contracts))
 
     for contract in contracts:
-        items: Any | None = valkey_client.get(f"contracts:{contract.contract_id}")
+        items: Any | None = contract_endpoints.valkey_client.get(f"contracts:{contract.contract_id}")
 
         if items:
             logger.debug(f"Found items for contract {contract.contract_id}")

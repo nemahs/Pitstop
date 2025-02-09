@@ -9,7 +9,7 @@ interface User {
 }
 
 
-function Header({raw_user, scopes, client_id}: {raw_user: string, scopes: string, client_id: number}) {
+function Header({raw_user, scopes, client_id, redirect_uri}: {raw_user: string, scopes: string, client_id: number, redirect_uri: string}) {
   let user: User = JSON.parse(raw_user);
 
 
@@ -20,7 +20,7 @@ function Header({raw_user, scopes, client_id}: {raw_user: string, scopes: string
     </mantine.Group>
   ) : (
     <mantine.Group justify="flex-end">
-      <LoginAnchor client_id={client_id} scopes={scopes}><img height={35} src="/static/eve-sso-login-black-large.png"></img></LoginAnchor>
+      <LoginAnchor client_id={client_id} scopes={scopes} redirect_uri={redirect_uri}><img height={35} src="/static/eve-sso-login-black-large.png"></img></LoginAnchor>
     </mantine.Group>
   );
 
@@ -35,10 +35,10 @@ function Header({raw_user, scopes, client_id}: {raw_user: string, scopes: string
 }
 
 
-function LoginAnchor({client_id, scopes, children}: {client_id: number, scopes: string, children: any}) {
+function LoginAnchor({client_id, scopes, redirect_uri, children}: {client_id: number, scopes: string, redirect_uri: string, children: any}) {
  
   let sso_url = "https://login.eveonline.com/v2/oauth/authorize?response_type=code";
-  sso_url += `&redirect_uri=${encodeURIComponent('https://pitstop.nemahs.org/login')}`;
+  sso_url += `&redirect_uri=${encodeURIComponent(redirect_uri)}`;
   sso_url += `&client_id=${client_id}`;
   sso_url += `&scope=${encodeURIComponent(scopes)}&state=banana`;
 
@@ -86,13 +86,13 @@ function Notifications({messages}: {messages: string})
   );
 }
 
-export function Layout({current_user, client_id, scopes, type, messages, children} : {current_user: string, client_id: number, scopes: string, type: any, messages: string, children: any}) {
+export function Layout({current_user, client_id, scopes, redirect_uri, type, messages, children} : {current_user: string, client_id: number, scopes: string, redirect_uri: string, type: any, messages: string, children: any}) {
   return (
     <mantine.MantineProvider defaultColorScheme='dark'>
       <mantine.AppShell header={{height: 40}} navbar={{width: 200, breakpoint: 'md'}}>
 
         <mantine.AppShell.Header>
-          <Header raw_user={current_user} client_id={client_id} scopes={scopes} />
+          <Header raw_user={current_user} client_id={client_id} scopes={scopes} redirect_uri={redirect_uri} />
         </mantine.AppShell.Header>
 
         <mantine.AppShellNavbar>
