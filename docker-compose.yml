@@ -1,0 +1,48 @@
+services:
+  frontend:
+    build: .
+    image: registry.nemahs.org/pitstop:latest
+    secrets:
+      - source: app.config
+        target: /app/.env
+
+    deploy:
+      labels:
+        traefik.enable: "true"
+        traefik.http.services.pitstop.loadbalancer.server.port: 80
+        traefik.docker.network: "incursions"
+        traefik.http.routers.pitstop.rule: "Host(`pitstop.nemahs.org`)"
+        traefik.http.routers.entrypoints: "websecure"
+        traefik.http.routers.pitstop.tls: "true"
+        traefik.http.routers.pitstop.tls.certresolver: "letsencrypt"
+        traefik.http.middlewares.redirecthttps.redirectscheme.scheme: "https"
+        traefik.http.routers.pitstop-http.rule: "Host(`pitstop.nemahs.org`)"
+        traefik.http.routers.pitstop-http.entrypoints: "web"
+        traefik.http.routers.pitstop-http.middlewares: "redirecthttps"
+
+    networks:
+      - pitstop
+      - incursions
+
+  valkey:
+    image: valkey/valkey:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - valkey_data:/data
+    networks:
+      - pitstop
+
+volumes:
+  valkey_data:
+
+secrets:
+  app.config:
+    file: ./.env
+
+networks:
+  pitstop:
+    driver: overlay
+  incursions: # TODO: Rename
+     external: true
+       
