@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resolve: (name) => {
             const pages = import.meta.glob('./pages/**/*.tsx', {eager: true});
             let page: any = pages[`./pages/${name}.tsx`];
-            page.default.layout = page.default.layout || ((page: any) => <MantineProvider defaultColorScheme='dark'><Layout type={page.type} {...page.props}>{page}</Layout></MantineProvider>);
+            page.default.layout = page.default.layout || ((page: any) => <MantineProvider defaultColorScheme='dark'><Layout name={name} {...page.props}>{page}</Layout></MantineProvider>);
             return page;
         },
         setup({el, App, props}) {

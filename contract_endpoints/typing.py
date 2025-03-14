@@ -15,3 +15,4 @@ class EnrichedContract(ESIContract, total=False):
     issuer_name: str
     location_name: str
     type_name: str
+    alliance: int | None

@@ -5,6 +5,7 @@ FROM python AS builder
 RUN apt update && apt install -y nodejs npm 
 WORKDIR /app
 COPY . /app/
+ENV FLASK_DEBUG=0
 RUN --mount=type=secret,id=.env,dst=/app/.env pip install --no-cache-dir -r /app/requirements.txt && flask vite install
 RUN --mount=type=secret,id=.env,dst=/app/.env flask vite build
 

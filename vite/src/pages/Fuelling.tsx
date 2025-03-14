@@ -1,7 +1,8 @@
 import useSWR from 'swr';
-import { Skeleton, SimpleGrid, Card, Tabs, Title, Image, Group } from '@mantine/core';
+import { Skeleton, SimpleGrid, Card, Tabs, Title, Notification, Image, Group } from '@mantine/core';
 import { Contract } from './Contracts.tsx';
 import { usePoll } from '@inertiajs/react';
+import { IconCheck } from '@tabler/icons-react';
 import { ContractType, LocationType } from '../types.tsx'
 
 const fetcher = (url: string | URL) => fetch(url).then((res) => res.json());
@@ -41,6 +42,9 @@ function AllFuelContracts() {
 
   return (
     <Skeleton visible={isLoading} height={400}>
+      {!isLoading && data.length == 0 &&
+        <Notification color="teal" icon={<IconCheck size={20} />} title="No fuel contracts, good work!" withCloseButton={false} />
+      }
       <SimpleGrid p={10} cols={4}>
         {contract_elements}
       </SimpleGrid>

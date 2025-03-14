@@ -1,9 +1,16 @@
-from typing import Any
+from enum import IntFlag, auto, verify, UNIQUE
 
 import valkey
 
 from .data.typing import AccessToken, RefreshToken
+from flask_principal import Permission, RoleNeed
 
+@verify(UNIQUE)
+class Permissions(IntFlag):
+    Admin = auto()
+
+
+admin_permissions = Permission(RoleNeed("Admin"))
 
 class AuthManager:
     def __init__(self, host: str = "localhost"):
@@ -23,12 +30,11 @@ class AuthManager:
 
         assert isinstance(name_data, bytes)
         name: str = name_data.decode("utf-8")
-
         return User(user_id, name)
 
 
 class User:
-    def __init__(self, id, name=None):
+    def __init__(self, id, name: str | None = None):
         self.id = id
         self.name = name
         self.is_active = True

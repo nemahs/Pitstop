@@ -18,6 +18,8 @@ class ContractStatus(str, Enum):
     DELETED = "deleted"
     EXPIRED = "expired"
     UNKNOWN = "unknown"
+    FINISHED_ISSUER = "finished_issuer"
+    FINISHED_CONTRACTOR = "finished_contractor"
 
 
 class ContractType(str, Enum):
@@ -81,6 +83,7 @@ class Contract:
     id: BaseID
     creator: NamedItem
     assignee: NamedItem
+    alliance: int | None
     contract_id: ContractID
     description: str
     location: NamedItem
@@ -91,14 +94,17 @@ class Contract:
     reward: float = 0.0
     type: ContractType = ContractType.UNKNOWN
     items: list[ContractItems] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_json(cls, data):
+    def from_json(cls, data: dict[str, Any]):
         return cls(
             id=data["contract_id"],
             creator=NamedItem(id=data["issuer_id"], name=data["issuer_name"]),
             assignee=NamedItem(id=data["assignee_id"], name=data["assignee_name"]),
             contract_id=data["contract_id"],
+            alliance=data.get("alliance", None),
             description=data["title"],
             location=NamedItem(id=data["start_location_id"], name=data["location_name"]),
             date_expired=parseRFC7231Date(data["date_expired"]),

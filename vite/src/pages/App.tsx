@@ -6,16 +6,25 @@ import { IconLogout, IconChevronRight, IconContract, IconGasStation, IconAssembl
 interface User {
   name: string;
   is_authenticated: boolean;
+  permissions: Permissions;
+
+
 }
 
+enum Permissions {
+  ADMIN = 1 << 0
+}
+
+function has_permission(user: User, permission: Permissions): boolean {
+  return (user.permissions & permission) === permission;
+}
 
 function Header({raw_user, scopes, client_id, redirect_uri}: {raw_user: string, scopes: string, client_id: number, redirect_uri: string}) {
   let user: User = JSON.parse(raw_user);
 
-
   let rightSide = user.is_authenticated ? (
     <mantine.Group justify='flex-end'>
-      <mantine.Title order={5}>Logged in as: {user.name}</mantine.Title>
+      <mantine.Title order={5}>Logged in as: {has_permission(user, Permissions.ADMIN) && "Admin"} {user.name}</mantine.Title>
       <mantine.Button component='a' href="/logout" variant='default' rightSection={<IconLogout />}>Logout</mantine.Button>
     </mantine.Group>
   ) : (
@@ -86,7 +95,7 @@ function Notifications({messages}: {messages: string})
   );
 }
 
-export function Layout({current_user, client_id, scopes, redirect_uri, type, messages, children} : {current_user: string, client_id: number, scopes: string, redirect_uri: string, type: any, messages: string, children: any}) {
+export function Layout({current_user, client_id, scopes, redirect_uri, name, messages, is_admin, children} : {current_user: string, client_id: number, scopes: string, redirect_uri: string, name: string, messages: string, is_admin: boolean, children: any}) {
   return (
     <mantine.MantineProvider defaultColorScheme='dark'>
       <mantine.AppShell header={{height: 40}} navbar={{width: 200, breakpoint: 'md'}}>
@@ -96,9 +105,9 @@ export function Layout({current_user, client_id, scopes, redirect_uri, type, mes
         </mantine.AppShell.Header>
 
         <mantine.AppShellNavbar>
-          <mantine.NavLink active={type.name === "Contracts" ? true : false} component={Link} href="/contracts" label="All Contracts" rightSection={<IconChevronRight />} leftSection={<IconContract />} />
-          <mantine.NavLink active={type.name === "Fuelling" ? true : false} component={Link} href="/fuelling" label="Fueling" rightSection={<IconChevronRight />} leftSection={<IconGasStation />} />
-          <mantine.NavLink disabled active={type.name === "Admin" ? true : false} component={Link} href="/admin" label="Admin" rightSection={<IconChevronRight />} leftSection={<IconAssemblyFilled />} />
+          <mantine.NavLink active={name === "Contracts" ? true : false} component={Link} href="/contracts" label="All Contracts" rightSection={<IconChevronRight />} leftSection={<IconContract />} />
+          <mantine.NavLink active={name === "Fuelling" ? true : false} component={Link} href="/fuelling" label="Fueling" rightSection={<IconChevronRight />} leftSection={<IconGasStation />} />
+          <mantine.NavLink disabled={!is_admin} active={name === "Admin" ? true : false} component={Link} href="/admin" label="Admin" rightSection={<IconChevronRight />} leftSection={<IconAssemblyFilled />} />
 
         </mantine.AppShellNavbar>
 

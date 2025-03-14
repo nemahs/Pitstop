@@ -17,16 +17,16 @@ from ..data.typing import AccessToken, RefreshToken
 from .typing import *
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 
 
 def pull_contracts(esi: ESI, corp_id: CorpID, valkey_host: str):
     valkey_client = Valkey(host=valkey_host)
 
     while True:
-        user: Any | None = valkey_client.srandmember("characters")
+        user = valkey_client.srandmember("characters")
         if user:
-            cast(bytes, user)
+            user = cast(bytes, user)
             user_id = UserID(BaseID(int(user.decode())))
             logger.info("Using user %d for contracts", user_id)
 
@@ -44,6 +44,9 @@ def pull_contracts(esi: ESI, corp_id: CorpID, valkey_host: str):
             ]
 
             logger.debug("Initial filter: %s", str(contract_ids))
+            
+            for contract in [ contract for contract in contracts if ContractID(BaseID(contract["contract_id"])) in contract_ids and int(contract["assignee_id"]) == corp_id ]:
+                contract["alliance"] = esi.get_character_alliance(contract["issuer_id"])
 
             with valkey_client.pipeline(False) as pipeline:
                 [pipeline.exists(f"contracts:{id}") for id in contract_ids]

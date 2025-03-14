@@ -25,6 +25,8 @@ export interface ContractType {
   reward: number;
   description: string;
   items: Array<ItemType>;
+  errors: Array<string>;
+  warnings: Array<string>;
 }
 
 export interface LocationType {

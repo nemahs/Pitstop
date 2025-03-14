@@ -12,7 +12,7 @@ class ESI(DataSource):
         self.cache = cache
 
     from .auth import get_tokens, refresh_tokens
-    from .character import get_character_corp
+    from .character import get_character_corp, get_character_alliance
 
     def get_contracts(self, corp_id: int):
         raise NotImplementedError

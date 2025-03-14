@@ -1,4 +1,4 @@
-import { SimpleGrid, Notification, Card, Text, Group, Image, Title } from '@mantine/core';
+import { SimpleGrid, Notification, Card, Text, Group, Image, Title, Badge, ListItem, List } from '@mantine/core';
 import { IconX } from '@tabler/icons-react';
 import { usePoll } from '@inertiajs/react';
 import { ItemType, ContractType, ItemStatus } from '../types';
@@ -15,7 +15,15 @@ function Item({item}: {item: ItemType}) {
   );
 }
 
-export function Contract({contract}: {contract: ContractType}) {
+const filterNames: Record<string, string> = {
+  "fuelRounding": "Fuel not rounded correctly",
+  "fuelHigh": "Fuel amounts too high",
+  "strontHigh": "Stront amounts too high",
+  "allianceCheck": "Contractor not in the correct alliance",
+  "infoPopulated": "No description given"
+}
+
+export function Contract({contract, disableFilters = false}: {contract: ContractType, disableFilters?: boolean}) {
   if (contract.items === undefined) {
     console.error(`Bad contract: ${JSON.stringify(contract)}`)
     return <>Buggy contract</>
@@ -26,6 +34,9 @@ export function Contract({contract}: {contract: ContractType}) {
   const given_items = to_give.map((item: ItemType) => (<Item key={item.item_type.id} item={item} />));
   const received_items = to_get.map((item: ItemType) => (<Item key={item.item_type.id} item={item} />));
 
+
+  const errors = contract.errors.map((error: string, i) => (<ListItem key={i}>{filterNames[error]}</ListItem>));
+  const warnings = contract.warnings.map((warning: string, i) => (<ListItem key={i}>{filterNames[warning]}</ListItem>));
 
   const wordStart = / ./g;
 
@@ -80,7 +91,36 @@ export function Contract({contract}: {contract: ContractType}) {
       <Card.Section withBorder inheritPadding pt={10} pb={10}>
         <Title order={6} pb={5}>No items found</Title>
       </Card.Section>}
+      
+      { !disableFilters && (errors.length > 0 || warnings.length > 0) &&
+      <Card.Section inheritPadding pb={5}>
+        {errors.length > 0 &&
+          <>
+          <Title order={6}>Errors</Title>
+          <List>{errors}</List>
+         </>
+         }
+        {warnings.length > 0 && 
+        <>
+          <Title order={6}>Warnings</Title>
+          <List>{warnings}</List>
+        </>
+        }
 
+      </Card.Section>}
+
+
+      { !disableFilters && (errors.length > 0 || warnings.length > 0) &&
+        <Group justify='flex-end'>
+          { errors.length > 0 && 
+            <Badge autoContrast color='red'>Reject Contract</Badge>
+          }
+
+          { errors.length == 0 && warnings.length > 0 &&
+            <Badge autoContrast color='yellow'>Leave for leadership</Badge>
+          }
+        </Group>
+      }
     </Card>
   );
 }
@@ -98,7 +138,7 @@ function Contracts({contracts}: {contracts: Array<ContractType>}) {
 
   const contract_components = contracts.map((contract) => {
     return (
-      <Contract key={contract.id} contract={contract} />
+      <Contract key={contract.id} contract={contract} disableFilters />
     );
   });
     

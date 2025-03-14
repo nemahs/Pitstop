@@ -9,6 +9,7 @@ Flask==3.1.0
 Flask-Cors==5.0.0
 flask-inertia==0.9
 Flask-Login==0.6.3
+Flask-Principal==0.4.0
 flask-vite==0.5.2
 gevent==24.11.1
 greenlet==3.1.1
