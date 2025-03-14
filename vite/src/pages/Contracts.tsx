@@ -1,7 +1,7 @@
-import { SimpleGrid, Notification, Card, Text, Group, Image, Title, Badge, ListItem, List } from '@mantine/core';
-import { IconX } from '@tabler/icons-react';
 import { usePoll } from '@inertiajs/react';
-import { ItemType, ContractType, ItemStatus } from '../types';
+import { Badge, Card, Group, Image, List, ListItem, Notification, NumberFormatter, SimpleGrid, Text, Title } from '@mantine/core';
+import { IconX } from '@tabler/icons-react';
+import { ContractType, ItemStatus, ItemType } from '../types';
 
 
 function Item({item}: {item: ItemType}) {
@@ -9,7 +9,7 @@ function Item({item}: {item: ItemType}) {
     <Group gap="xs">
       <Image w={30} src={"https://images.evetech.net/types/" + item.item_type.id + "/icon"} />
       <Text>
-        {item.item_type.name} : {item.quantity.toLocaleString()}
+        {item.item_type.name} : <NumberFormatter thousandSeparator value={item.quantity} />
       </Text>
     </Group>
   );
@@ -65,7 +65,7 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
       {contract.price > 0.0 &&
       <Group gap="xs">
         <Title order={6}>Price:</Title>
-        {contract.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ISK
+        <NumberFormatter value={contract.price} thousandSeparator decimalScale={2} suffix=' ISK' />
       </Group>}
 
       {contract.reward > 0.0 &&
@@ -126,7 +126,7 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
 }
 
 function Contracts({contracts}: {contracts: Array<ContractType>}) {
-  usePoll(10000, {}, {keepAlive: true});
+  usePoll(5000, {}, {keepAlive: true});
 
   if (contracts.length == 0) {
     return (
@@ -134,7 +134,7 @@ function Contracts({contracts}: {contracts: Array<ContractType>}) {
     );
   }
 
-  console.log(`${contracts.length} contracts to display`);
+  console.debug(`${contracts.length} contracts to display`);
 
   const contract_components = contracts.map((contract) => {
     return (

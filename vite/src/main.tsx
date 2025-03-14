@@ -4,7 +4,6 @@ import {createInertiaApp} from '@inertiajs/react';
 import { Layout } from "./pages/App";
 
 import '@mantine/core/styles.css'
-import { MantineProvider } from '@mantine/core'
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -12,16 +11,14 @@ document.addEventListener('DOMContentLoaded', () => {
         resolve: (name) => {
             const pages = import.meta.glob('./pages/**/*.tsx', {eager: true});
             let page: any = pages[`./pages/${name}.tsx`];
-            page.default.layout = page.default.layout || ((page: any) => <MantineProvider defaultColorScheme='dark'><Layout name={name} {...page.props}>{page}</Layout></MantineProvider>);
+            page.default.layout = page.default.layout || ((page: any) => <Layout name={name} {...page.props}>{page}</Layout>);
             return page;
         },
         setup({el, App, props}) {
             createRoot(el).render(
-              <MantineProvider defaultColorScheme='dark'>           
-                <StrictMode>
-                    <App {...props} />
-                </StrictMode>
-              </MantineProvider>
+            <StrictMode>
+                <App {...props} />
+            </StrictMode>
             );
         }
     }).then(() => {

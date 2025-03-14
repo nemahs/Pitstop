@@ -1,9 +1,8 @@
-import useSWR from 'swr';
-import { Skeleton, SimpleGrid, Card, Tabs, Title, Notification, Image, Group } from '@mantine/core';
-import { Contract } from './Contracts.tsx';
-import { usePoll } from '@inertiajs/react';
+import { Card, Group, Image, Loader, Notification, SimpleGrid, Skeleton, Tabs, Title } from '@mantine/core';
 import { IconCheck } from '@tabler/icons-react';
-import { ContractType, LocationType } from '../types.tsx'
+import useSWR from 'swr';
+import { ContractType, LocationType } from '../types.tsx';
+import { Contract } from './Contracts.tsx';
 
 const fetcher = (url: string | URL) => fetch(url).then((res) => res.json());
 
@@ -28,19 +27,19 @@ function Location({data}: {data: LocationType}) {
 
 
 function AllFuelContracts() {
-  usePoll(10000);
-  const { data, isLoading } = useSWR("/fuel/all", fetcher);
+  const { data, isLoading } = useSWR("/fuel/all", fetcher, {refreshInterval: 5000});
   let contract_elements = <></>;
   if (!isLoading)
   {
     contract_elements = data.map((data: ContractType) => (
-      //<Location key={location} data={data} />
       <Contract key={data.id} contract={data} />
     ));
   }
 
 
   return (
+    <>
+    {isLoading && <Loader />}
     <Skeleton visible={isLoading} height={400}>
       {!isLoading && data.length == 0 &&
         <Notification color="teal" icon={<IconCheck size={20} />} title="No fuel contracts, good work!" withCloseButton={false} />
@@ -49,11 +48,12 @@ function AllFuelContracts() {
         {contract_elements}
       </SimpleGrid>
     </Skeleton>
+    </>
   );
 }
 
 function ByLocation() {
-  const { data, isLoading } = useSWR("/fuel/by-location", fetcher);
+  const { data, isLoading } = useSWR("/fuel/by-location", fetcher, {refreshInterval: 5000});
   let location_elements = <></>;
 
   if (!isLoading && data !== undefined)

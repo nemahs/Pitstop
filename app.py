@@ -3,6 +3,8 @@ import logging
 import sys
 import threading
 import platform
+from types import SimpleNamespace
+from typing import cast
 
 # Monkey patch json encoder. We disable the type system here as monkey patching is...weird
 from json import JSONEncoder
@@ -16,26 +18,16 @@ JSONEncoder.default = _default # type: ignore
 
 
 from dotenv import dotenv_values
-from flask import Flask, flash, get_flashed_messages, redirect, request, url_for
+from flask import Flask, flash, get_flashed_messages, redirect, request
 from flask_inertia import Inertia, render_inertia
 from flask_principal import Principal, identity_changed, Identity
 from flask_cors import CORS
-from werkzeug.middleware.proxy_fix import ProxyFix
-from flask_login import (
-    LoginManager,
-    current_user,
-    login_required,
-    login_user,
-    logout_user,
-)
+from flask_login import (LoginManager, current_user, login_required, login_user, logout_user)
 from flask_vite import Vite
-from typing import cast
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .auth import AuthManager, User, admin_permissions
-from .contract_endpoints import contract_endpoints
-from .contract_endpoints.blueprint import get_outstanding_contracts
-from .contract_endpoints.fetcher import pull_contracts
-from .contract_endpoints.typing import BaseID, CorpID
+from .contract_endpoints import contract_endpoints, get_outstanding_contracts, pull_contracts, CorpID, BaseID
 from .data import DataSource
 from .ValkeyInformationProvider import ValkeyInformationProvider
 from .data.esi import ESI
@@ -62,32 +54,30 @@ inertia = Inertia(app)
 app.register_blueprint(contract_endpoints, url_prefix="/fuel")
 
 
+@filters_endpoints.before_request
+@login_required
+@admin_permissions.require()
+def pre_filters():
+    pass
+
+app.register_blueprint(filters_endpoints, url_prefix="/admin/filters")
+
 if app.config["DEBUG"]:
     CORS(app)
     app.config["CORS_HEADERS"] = "Content-Type"
 else:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-config = dotenv_values(".env.development" if app.config["DEBUG"] else ".env")
-if not config["CLIENT_ID"] or not config["CLIENT_SECRET"]:
-    sys.exit("Missing client ID or client secret, cannot start")
+config = SimpleNamespace(dotenv_values(".env.development" if app.config["DEBUG"] else ".env"))
 
-valkey_host = config.get("VALKEY_HOST", "localhost")
-if not valkey_host:
-    sys.exit("No given valkey host, cannot start")
-user_auth = AuthManager(host=valkey_host if valkey_host else "localhost")
+valkey_host = config.VALKEY_HOST if config.VALKEY_HOST else "localhost"
 
+user_auth = AuthManager(host=valkey_host)
 provider = ValkeyInformationProvider(app, valkey_host)
-datasource: DataSource = ESI(config["CLIENT_ID"], config["CLIENT_SECRET"])
+datasource: DataSource = ESI(config.CLIENT_ID, config.CLIENT_SECRET)
 
 if "vite" not in sys.argv:
-    if "CORP_ID" not in config:
-        sys.exit("Missing corp id, cannot start")
-    _id = config["CORP_ID"]
-    if _id is None:
-        sys.exit("Corp ID was set to None, cannot start")
-
-    corp_id = CorpID(BaseID(int(_id)))
+    corp_id = CorpID(BaseID(int(config.CORP_ID)))
     contract_endpoints.corp_id = corp_id
     contract_endpoints.create_valkey_client(valkey_host if valkey_host else "localhost")
     filters_endpoints.create_valkey_client(valkey_host if valkey_host else "localhost")
@@ -100,7 +90,7 @@ if "vite" not in sys.argv:
 
     contracting_thread.start()
 
-# Inertia helpers
+#region Inertia helpers
 def get_current_user():
     return json.dumps(current_user.__dict__)
 
@@ -111,13 +101,16 @@ def get_is_admin():
     return admin_permissions.can()
 
 # Shared data
-inertia.share("client_id", config["CLIENT_ID"])
-inertia.share("scopes", config["SCOPES"])
-inertia.share("redirect_uri", config["REDIRECT_URI"])
+inertia.share("client_id", config.CLIENT_ID)
+inertia.share("scopes", config.SCOPES)
+inertia.share("redirect_uri", config.REDIRECT_URI)
 inertia.share("current_user", get_current_user)
 inertia.share("messages", get_messages)
 inertia.share("is_admin", get_is_admin)
 
+#endregion
+
+#region Routes 
 
 @app.route("/")
 def index():
@@ -140,7 +133,7 @@ def login_endpoint():
     character_id: str = token_data["sub"].split(":")[2]
 
     corp_id = datasource.get_character_corp(character_id)
-    if config["CORP_ID"] and corp_id != int(config["CORP_ID"]):
+    if corp_id != int(config.CORP_ID):
         flash(f"{token_data["name"]} is not in the necessary corp", "warning")
         app.logger.warning(f"Character {token_data['name']} attempted to log in")
         return redirect("/")
@@ -205,4 +198,4 @@ def admin():
 
     return render_inertia("Admin", props=props)
 
-app.register_blueprint(filters_endpoints, url_prefix="/admin/filters")
+#endregion

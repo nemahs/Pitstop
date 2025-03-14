@@ -2,6 +2,7 @@ import { router } from "@inertiajs/react";
 import { Button, Fieldset, Group, Input, NativeSelect, NumberInput, SegmentedControl, Stack, Table, Tabs, TagsInput, TextInput } from "@mantine/core";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
+import { FILTERS, ValueTypes } from "../types";
 
 function Admin({filters}: {filters: SavedFilter[]}) {
     return (
@@ -31,18 +32,22 @@ interface SavedFilter {
     value: any;
 }
 
+function FilterDisplay({filter}: {filter: SavedFilter})
+{
+    const filter_key = JSON.stringify(filter);
+    return (<Table.Tr>
+            <Table.Td width={110}>{filter.type === "Error" ? "⛔ Error" : "⚠️ Warning"}</Table.Td>
+            <Table.Td>{FILTERS.find((x) => x.value === filter.name)?.label}</Table.Td>
+            <Table.Td>{filter.value?.toLocaleString()}</Table.Td>
+            <Table.Td width={30}><Button disabled size="compact-xs" variant="transparent"><IconPencil /></Button></Table.Td>
+            <Table.Td width={30}><Button size="compact-xs" onClick={() => router.delete("/admin/filters", {data: {filter: filter_key}, preserveUrl: true} )}  variant="transparent"><IconTrash color="darkred" /></Button></Table.Td>
+        </Table.Tr>);
+}
+
 function FilterManagement({filters}: {filters: SavedFilter[]}) {
 
     const filter_data = filters.map((filter, i) => {
-        const key = JSON.stringify(filter);
-        return (
-            <Table.Tr key={i}>
-                <Table.Td width={110}>{filter.type === "Error" ? "⛔ Error" : "⚠️ Warning"}</Table.Td>
-                <Table.Td>{FILTERS.find((x) => x.value === filter.name)?.label}</Table.Td>
-                <Table.Td>{filter.value?.toLocaleString()}</Table.Td>
-                <Table.Td width={30}><Button disabled size="compact-xs" variant="transparent"><IconPencil /></Button></Table.Td>
-                <Table.Td width={30}><Button size="compact-xs" onClick={() => router.delete("/admin/filters", {data: {filter: key}, preserveUrl: true} )}  variant="transparent"><IconTrash color="darkred" /></Button></Table.Td>
-            </Table.Tr>);
+        return <FilterDisplay key={i} filter={filter} />
     });
 
     return (
@@ -66,33 +71,6 @@ function FilterManagement({filters}: {filters: SavedFilter[]}) {
         </Stack>
     );
 }
-
-enum ValueTypes {
-    NUMBER,
-    LIST,
-    STRING,
-    NONE
-}
-
-class FilterType {
-    value: string;
-    label: string;
-    type: ValueTypes;
-
-    constructor(name: string, label: string, value_type: ValueTypes = ValueTypes.NONE) {
-        this.value = name;
-        this.label = label;
-        this.type = value_type;
-    }
-}
-
-const FILTERS: FilterType[] = [
-    new FilterType("fuelRounding", "Round fuel to the nearest ", ValueTypes.NUMBER),
-    new FilterType("allianceCheck", "Contractor in given alliances", ValueTypes.LIST),
-    new FilterType("fuelHigh", "Total fuel requested is less than", ValueTypes.NUMBER),
-    new FilterType("strontHigh", "Total stront requested is less than", ValueTypes.NUMBER),
-    new FilterType("infoPopulated", "Info is not empty"),
-];
 
 function AddFilterForm() {
     const [filter_type, set_filter_type] = useState('Warning');

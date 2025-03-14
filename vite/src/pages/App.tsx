@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import * as mantine from '@mantine/core'
 import { Link } from '@inertiajs/react';
-import { IconLogout, IconChevronRight, IconContract, IconGasStation, IconAssemblyFilled } from '@tabler/icons-react'
+import * as mantine from '@mantine/core';
+import { IconAssemblyFilled, IconChevronRight, IconContract, IconGasStation, IconLogout } from '@tabler/icons-react';
+import { useState } from 'react';
 
 interface User {
   name: string;
@@ -106,7 +106,7 @@ export function Layout({current_user, client_id, scopes, redirect_uri, name, mes
 
         <mantine.AppShellNavbar>
           <mantine.NavLink active={name === "Contracts" ? true : false} component={Link} href="/contracts" label="All Contracts" rightSection={<IconChevronRight />} leftSection={<IconContract />} />
-          <mantine.NavLink active={name === "Fuelling" ? true : false} component={Link} href="/fuelling" label="Fueling" rightSection={<IconChevronRight />} leftSection={<IconGasStation />} />
+          <mantine.NavLink active={name === "Fuelling" ? true : false} component={Link} prefetch href="/fuelling" label="Fueling" rightSection={<IconChevronRight />} leftSection={<IconGasStation />} />
           <mantine.NavLink disabled={!is_admin} active={name === "Admin" ? true : false} component={Link} href="/admin" label="Admin" rightSection={<IconChevronRight />} leftSection={<IconAssemblyFilled />} />
 
         </mantine.AppShellNavbar>

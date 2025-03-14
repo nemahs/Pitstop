@@ -1,7 +1,9 @@
 import json
 import logging
 import time
-from typing import Any, Callable, Sequence, cast
+from typing import Any, cast
+from collections.abc import Callable, Iterable, MutableMapping, Sequence
+from unittest.mock import Base
 
 from more_itertools import partition
 from valkey import Valkey
@@ -21,13 +23,12 @@ logger.setLevel(logging.WARNING)
 
 
 def pull_contracts(esi: ESI, corp_id: CorpID, valkey_host: str):
-    valkey_client = Valkey(host=valkey_host)
+    valkey_client = Valkey(host=valkey_host, decode_responses=True)
 
     while True:
-        user = valkey_client.srandmember("characters")
-        if user:
-            user = cast(bytes, user)
-            user_id = UserID(BaseID(int(user.decode())))
+        if user := valkey_client.srandmember("characters"):
+            assert isinstance(user, str)
+            user_id = UserID(BaseID(int(user)))
             logger.info("Using user %d for contracts", user_id)
 
             logger.debug("Getting basic contract data for corp")
@@ -46,7 +47,7 @@ def pull_contracts(esi: ESI, corp_id: CorpID, valkey_host: str):
             logger.debug("Initial filter: %s", str(contract_ids))
             
             for contract in [ contract for contract in contracts if ContractID(BaseID(contract["contract_id"])) in contract_ids and int(contract["assignee_id"]) == corp_id ]:
-                contract["alliance"] = esi.get_character_alliance(contract["issuer_id"])
+                contract["alliance"] = esi.get_character_alliance(contract["issuer_id"]) 
 
             with valkey_client.pipeline(False) as pipeline:
                 [pipeline.exists(f"contracts:{id}") for id in contract_ids]
@@ -121,7 +122,7 @@ type LookupFunction = Callable[[list[BaseID]], dict[BaseID, str]]
 
 def cached_lookup(
     prefix: str, attr: str, contracts: Sequence[ESIContract], lookup_func: LookupFunction, valkey_client: Valkey
-) -> dict[BaseID, str]:
+) -> MutableMapping[BaseID, str]:
     """Look up names for a set of IDs, caching the results in Valkey.
 
     :param prefix: Valkey prefix for caching
@@ -131,15 +132,15 @@ def cached_lookup(
     :return: Mapping of attr IDs to their names
     """
     unknown_ids, known_ids = partition(
-        lambda x: valkey_client.exists(f"{prefix}:{x}"), {contract[attr] for contract in contracts}
+        lambda x: valkey_client.exists(f"{prefix}:{x}"), {cast(BaseID, contract[attr]) for contract in contracts}
     )
 
-    unknown_ids = list(unknown_ids)
-    known_ids = list(known_ids)
+    unknown_ids: Iterable[BaseID] = list(unknown_ids)
+    known_ids : Iterable[BaseID] = list(known_ids)
 
     logger.debug("%d known %s ids, %d unknown %s ids", len(known_ids), attr, len(unknown_ids), attr)
 
-    output = {id: valkey_client.get(f"{prefix}:{id}").decode() for id in known_ids}  # type: ignore
+    output: MutableMapping[BaseID, str] = {id: value for id in known_ids if (value := valkey_client.get(f"{prefix}:{id}")) is not None and id is not None}  # type: ignore
 
     if unknown_ids:
         new_names = lookup_func(unknown_ids)
@@ -164,13 +165,12 @@ def get_key(esi: ESI, user_id: UserID, valkey_client: Valkey) -> AccessToken:
         and (remaining_ttl := int(valkey_client.ttl(f"{user_id}:access_token"))) > 100  # type: ignore
     ):
         data = valkey_client.get(f"{user_id}:access_token")
-        assert isinstance(data, bytes)
+        assert isinstance(data, str)
         logger.debug("%d seconds left in access token", remaining_ttl)
-        return AccessToken(data.decode())
+        return AccessToken(data)
 
-    refresh_token_data = valkey_client.get(f"{user_id}:refresh_token")
-    assert isinstance(refresh_token_data, bytes)
-    refresh_token = RefreshToken(refresh_token_data.decode())
+    refresh_token_data = cast(str, valkey_client.get(f"{user_id}:refresh_token"))
+    refresh_token = RefreshToken(refresh_token_data)
 
     token_data = esi.refresh_tokens(refresh_token)
     valkey_client.set(f"{user_id}:access_token", token_data.access_token, ex=token_data.expiry)

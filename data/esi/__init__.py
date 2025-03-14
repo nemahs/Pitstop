@@ -2,7 +2,7 @@ from requests.auth import HTTPBasicAuth
 from valkey import Valkey
 
 from ..data_source import DataSource
-from .utils import ESIError
+from .utils import ESIError as ESIError
 
 
 class ESI(DataSource):
