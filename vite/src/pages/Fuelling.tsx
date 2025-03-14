@@ -1,4 +1,4 @@
-import { Card, Group, Image, Loader, Notification, SimpleGrid, Skeleton, Tabs, Title } from '@mantine/core';
+import { Card, Group, Image, Loader, Notification, SimpleGrid, Skeleton, Tabs, Text, Title } from '@mantine/core';
 import { IconCheck } from '@tabler/icons-react';
 import useSWR from 'swr';
 import { ContractType, LocationType } from '../types.tsx';
@@ -44,6 +44,7 @@ function AllFuelContracts() {
       {!isLoading && data.length == 0 &&
         <Notification color="teal" icon={<IconCheck size={20} />} title="No fuel contracts, good work!" withCloseButton={false} />
       }
+      <Group justify='flex-end' pr={5}><Text size="xs">Double-click a contract to open it on your logged in user</Text></Group>
       <SimpleGrid p={10} cols={4}>
         {contract_elements}
       </SimpleGrid>

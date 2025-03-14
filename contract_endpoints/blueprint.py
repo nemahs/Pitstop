@@ -143,7 +143,6 @@ def inAllowedAlliances(contract: Contract, alliance_ids: list[str] | None) -> bo
     if not alliance_ids:
         return True
 
-    print(f"Checking {contract.alliance} against {str(alliance_ids)}")
     return str(contract.alliance) in alliance_ids or contract.alliance is None
 
 filter_functions: dict[str, FilterFunction]  = {

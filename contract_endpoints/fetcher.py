@@ -165,7 +165,7 @@ def get_key(esi: ESI, user_id: UserID, valkey_client: Valkey) -> AccessToken:
         and (remaining_ttl := int(valkey_client.ttl(f"{user_id}:access_token"))) > 100  # type: ignore
     ):
         data = valkey_client.get(f"{user_id}:access_token")
-        assert isinstance(data, str)
+        assert isinstance(data, str), f"Data was of type {type(data)}"
         logger.debug("%d seconds left in access token", remaining_ttl)
         return AccessToken(data)
 

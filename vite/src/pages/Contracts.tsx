@@ -1,3 +1,4 @@
+import { router } from '@inertiajs/core';
 import { usePoll } from '@inertiajs/react';
 import { Badge, Card, Group, Image, List, ListItem, Notification, NumberFormatter, SimpleGrid, Text, Title } from '@mantine/core';
 import { IconX } from '@tabler/icons-react';
@@ -41,7 +42,7 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
   const wordStart = / ./g;
 
   return (
-    <Card radius='lg'>
+    <Card styles={{root: {cursor: 'pointer'}}} radius='lg' onDoubleClick={() => router.post("/contracts/open", {'id': contract.id})}>
       <Group gap="xs">
         <Title order={6}>From:</Title>
         {contract.creator.name}
@@ -71,7 +72,7 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
       {contract.reward > 0.0 &&
       <Group gap="xs">
         <Title order={6}>Reward:</Title>
-        {contract.reward.toLocaleString()} ISK
+        <NumberFormatter value={contract.reward} thousandSeparator decimalScale={2} suffix=' ISK' />
       </Group>}
 
       {given_items.length > 0 &&

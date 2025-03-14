@@ -9,6 +9,7 @@ from typing import cast
 # Monkey patch json encoder. We disable the type system here as monkey patching is...weird
 from json import JSONEncoder
 
+
 def _default(self, obj):
     return getattr(obj.__class__, "to_json", _default.default)(obj) # type: ignore
 
@@ -25,12 +26,15 @@ from flask_cors import CORS
 from flask_login import (LoginManager, current_user, login_required, login_user, logout_user)
 from flask_vite import Vite
 from werkzeug.middleware.proxy_fix import ProxyFix
+from valkey import Valkey
 
 from .auth import AuthManager, User, admin_permissions
 from .contract_endpoints import contract_endpoints, get_outstanding_contracts, pull_contracts, CorpID, BaseID
+from .contract_endpoints.fetcher import get_key
 from .data import DataSource
 from .ValkeyInformationProvider import ValkeyInformationProvider
 from .data.esi import ESI
+from .data.esi.corporation import open_corp_contract
 from .filters import filters_endpoints
 from .data.esi.auth import decode_token
 
@@ -173,6 +177,16 @@ def contracts():
     props = {"contracts": get_contracts}
     return render_inertia("Contracts", props)
 
+@app.post("/contracts/open")
+@login_required
+def open_contract():
+    options = request.json
+    print(f"Getting key for {current_user.id}")
+    key = get_key(cast(ESI, datasource), current_user.id, valkey_client=Valkey(valkey_host, decode_responses=True))
+
+    open_corp_contract(options["id"], key)
+
+    return redirect(request.referrer, 303)
 
 @app.route("/fuelling")
 @login_required

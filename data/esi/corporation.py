@@ -5,7 +5,7 @@ from typing import Any, Required, TypedDict
 import requests
 
 from ..typing import AccessToken
-from .utils import ESIError
+from .utils import ESIError, ESI_BASE_URL, auth_headers
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,8 @@ class ESIContract(TypedDict, total=False):
 
 def get_corp_contracts(corp_id: int, access_token: AccessToken) -> list[ESIContract]:
     response = requests.get(
-        f"https://esi.evetech.net/latest/corporations/{corp_id}/contracts/",
-        headers={"Authorization": f"Bearer {access_token}"},
+        f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/",
+        headers=auth_headers(access_token),
     )
 
     if response.status_code != requests.codes.ok:
@@ -60,8 +60,8 @@ def get_corp_contracts(corp_id: int, access_token: AccessToken) -> list[ESIContr
     if remaining_pages:
         for page in range(2, int(remaining_pages) + 1):
             response = requests.get(
-                f"https://esi.evetech.net/latest/corporations/{corp_id}/contracts/?page={page}",
-                headers={"Authorization": f"Bearer {access_token}"},
+                f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/?page={page}",
+                headers=auth_headers(access_token),
             )
 
             if response.status_code != requests.codes.ok:
@@ -75,8 +75,8 @@ def get_corp_contracts(corp_id: int, access_token: AccessToken) -> list[ESIContr
 
 def get_corp_contract_items(corp_id: int, contract_id: int, access_token: AccessToken) -> list[Any]:
     response = requests.get(
-        f"https://esi.evetech.net/latest/corporations/{corp_id}/contracts/{contract_id}/items/",
-        headers={"Authorization": f"Bearer {access_token}"},
+        f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/{contract_id}/items/",
+        headers=auth_headers(access_token),
     )
 
     if response.status_code != 200:
@@ -85,3 +85,12 @@ def get_corp_contract_items(corp_id: int, contract_id: int, access_token: Access
 
     logger.info(f"Fetched items for contract {contract_id}")
     return response.json()
+
+
+def open_corp_contract(contract_id: int, access_token: AccessToken):
+    response = requests.post(f"{ESI_BASE_URL}/ui/openwindow/contract?contract_id={contract_id}",
+                             headers=auth_headers(access_token))
+    
+
+    if response.status_code != requests.status_codes.codes.OK:
+        logger.error(f"Error occurred trying to open contract window, code: {response.status_code}, text: {response.text}")
