@@ -19,6 +19,8 @@ from dotenv import dotenv_values
 from flask import Flask, flash, get_flashed_messages, redirect, request, url_for
 from flask_inertia import Inertia, render_inertia
 from flask_principal import Principal, identity_changed, Identity
+from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import (
     LoginManager,
     current_user,
@@ -47,8 +49,11 @@ logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 app = Flask(__name__, static_folder="static")
+if platform.system() == "Windows":
+    app.config.update({"VITE_NPM_BIN_PATH": "npm.cmd"})
 
 app.config.from_object(__name__)
+
 login_manager = LoginManager(app)
 Vite(app)
 principal = Principal(app)
@@ -56,13 +61,12 @@ inertia = Inertia(app)
 
 app.register_blueprint(contract_endpoints, url_prefix="/fuel")
 
-if platform.system() == "Windows":
-    app.config.update({"VITE_NPM_BIN_PATH": "npm.ps1"})
 
 if app.config["DEBUG"]:
-    from flask_cors import CORS
     CORS(app)
     app.config["CORS_HEADERS"] = "Content-Type"
+else:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 config = dotenv_values(".env.development" if app.config["DEBUG"] else ".env")
 if not config["CLIENT_ID"] or not config["CLIENT_SECRET"]:
