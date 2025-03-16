@@ -25,6 +25,9 @@ services:
   grafana:
     image: grafana/grafana
 
+    environment:
+      GF_SERVER_DOMAIN: "grafana.nemahs.org"
+
     deploy:
       labels:
         traefik.enable: "true"
@@ -36,6 +39,9 @@ services:
         traefik.http.routers.grafana.middlewares: "redirect"
         traefik.http.middlewares.redirect.redirectscheme.scheme: "https"
         traefik.http.middlewares.redirect.redirectscheme.permanent: "true"
+
+    volumes:
+      - grafana_data:/var/lib/grafana:rw
 
     networks:
       - pitstop
@@ -52,6 +58,7 @@ services:
 
 volumes:
   valkey_data:
+  grafana_data:
 
 secrets:
   app.config:
