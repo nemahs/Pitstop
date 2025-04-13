@@ -2,6 +2,7 @@ import { router } from '@inertiajs/core';
 import { usePoll } from '@inertiajs/react';
 import { Badge, Card, Group, Image, List, ListItem, Notification, NumberFormatter, SimpleGrid, Text, Title } from '@mantine/core';
 import { IconX } from '@tabler/icons-react';
+import { decode } from 'html-entities';
 import { ContractType, ItemStatus, ItemType } from '../types';
 
 
@@ -42,7 +43,7 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
   const wordStart = / ./g;
 
   return (
-    <Card styles={{root: {cursor: 'pointer'}}} radius='lg' onDoubleClick={() => router.post("/contracts/open", {'id': contract.id})}>
+    <Card styles={{root: {cursor: 'pointer'}}} radius='lg' onDoubleClick={() => router.post("/contracts/open", {'id': contract.id}, {preserveScroll: true, preserveState: true})}>
       <Group gap="xs">
         <Title order={6}>From:</Title>
         {contract.creator.name}
@@ -60,7 +61,7 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
 
       <Group gap="xs">
         <Title order={6}>Description:</Title>
-        {contract.description != "" ? `"${contract.description}"` : "No Description" }
+        <Text>{contract.description != "" ? `"${decode(decodeURIComponent(contract.description))}"` : "No Description" }</Text>
       </Group>
 
       {contract.price > 0.0 &&

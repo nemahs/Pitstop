@@ -25,4 +25,6 @@ def get_character_alliance(self, character_id: int) -> int | None:
         logger.warning("Error returned while getting character alliance, got %s", response.text)
         return None
 
-    return response.json()["alliance_id"]
+    response_data = response.json()
+
+    return response_data.get("alliance_id", None)

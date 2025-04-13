@@ -41,10 +41,10 @@ function AllFuelContracts() {
     <>
     {isLoading && <Loader />}
     <Skeleton visible={isLoading} height={400}>
+      <Group justify='flex-end' pr={5}><Text size="xs">Double-click a contract to open it on your logged in user</Text></Group>
       {!isLoading && data.length == 0 &&
         <Notification color="teal" icon={<IconCheck size={20} />} title="No fuel contracts, good work!" withCloseButton={false} />
       }
-      <Group justify='flex-end' pr={5}><Text size="xs">Double-click a contract to open it on your logged in user</Text></Group>
       <SimpleGrid p={10} cols={4}>
         {contract_elements}
       </SimpleGrid>

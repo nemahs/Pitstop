@@ -18,10 +18,11 @@ class ValkeyInformationProvider():
         logger.debug(f"Called to provide information from {str(sender)}")
 
         permissions_data = self.valkey_client.get(f"{identity.id}:permissions")
-        assert type(permissions_data) == bytes
-        permissions = Permissions(int.from_bytes(permissions_data))
-        logger.debug(f"Got {permissions} from Valkey")
+        if permissions_data:
+            assert type(permissions_data) == bytes, f"Type is {type(permissions_data)}"
+            permissions = Permissions(int.from_bytes(permissions_data))
+            logger.debug(f"Got {permissions} from Valkey")
 
-        for permission in list(permissions):
-            identity.provides.add(RoleNeed(permission.name))
-            logger.debug(f"Adding {permission.name} to list of permissions for user {identity.id}")
+            for permission in list(permissions):
+                identity.provides.add(RoleNeed(permission.name))
+                logger.debug(f"Adding {permission.name} to list of permissions for user {identity.id}")
