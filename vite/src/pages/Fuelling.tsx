@@ -79,7 +79,7 @@ function Fuelling()
     <Tabs defaultValue="all" activateTabWithKeyboard={false}>
       <Tabs.List>
         <Tabs.Tab value="all">All Fuel Contracts</Tabs.Tab>
-        <Tabs.Tab value="location">By Contract Location</Tabs.Tab>
+        <Tabs.Tab value="location">By Fuelling Location</Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="all">
           <AllFuelContracts />

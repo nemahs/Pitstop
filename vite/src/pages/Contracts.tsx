@@ -22,7 +22,8 @@ const filterNames: Record<string, string> = {
   "fuelHigh": "Fuel amounts too high",
   "strontHigh": "Stront amounts too high",
   "allianceCheck": "Contractor not in the correct alliance",
-  "infoPopulated": "No description given"
+  "infoPopulated": "No description given",
+  "validStation": "Not in a valid fuelling station"
 }
 
 export function Contract({contract, disableFilters = false}: {contract: ContractType, disableFilters?: boolean}) {

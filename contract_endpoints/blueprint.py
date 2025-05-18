@@ -2,34 +2,27 @@ import itertools
 import json
 import logging
 from datetime import datetime
-from typing import Any, List, Callable, cast
+from string import Template
+from typing import Any, cast
+from collections.abc import Callable
 
-import valkey
+from valkey import Valkey
 from flask import Blueprint
 
 from .dataclasses import *
 from .typing import *
+from .filters import filter_functions
+from ..data.esi import ESI
+from .stations import create_station_blueprint, STATION_KEY
 
-
-class ContractBlueprint(Blueprint):
-    def __init__(self, name: str, import_name: str, corp_id: CorpID | None = None):
-        super().__init__(name, import_name)
-        self.corp_id = corp_id
-
-    def create_valkey_client(self, host: str) -> None:
-        self.valkey_client = valkey.Valkey(host=host)
-
-
-contract_endpoints = ContractBlueprint("contracts", __name__)
 logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG)
+CONTRACT_LIST_KEY = "contracts"
+CONTRACT_ITEMS_KEY = Template(f"{CONTRACT_LIST_KEY}:$id")
+ITEM_NAME_KEY = Template("names:$id")
 
-
-# TODO: Make filters configurable
-def get_outstanding_contracts(corp_id: CorpID) -> list[Contract]:
-    assert contract_endpoints.valkey_client is not None
-    contract_data: Any | None = contract_endpoints.valkey_client.get("contracts")
-    contracts: List[Contract] = json.loads(contract_data, cls=ContractDecoder) if contract_data else []
+def get_outstanding_contracts(corp_id: CorpID, valkey_client: Valkey) -> list[Contract]:
+    contract_data: Any | None = valkey_client.get(CONTRACT_LIST_KEY)
+    contracts: list[Contract] = json.loads(contract_data, cls=ContractDecoder) if contract_data else []
     logger.debug("Parsed %d contracts out of Valkey", len(contracts))
 
     contracts = [
@@ -43,20 +36,19 @@ def get_outstanding_contracts(corp_id: CorpID) -> list[Contract]:
     logger.debug("%d contracts remaining after filtering", len(contracts))
 
     for contract in contracts:
-        items: Any | None = contract_endpoints.valkey_client.get(f"contracts:{contract.contract_id}")
+        items: Any | None = valkey_client.get(CONTRACT_ITEMS_KEY.substitute(id=contract.contract_id))
 
         if items:
-            logger.debug(f"Found items for contract {contract.contract_id}")
-            contract.items = aggregate_items(json.loads(items, cls=ItemDecoder))
+            logger.debug("Found items for contract %d", contract.contract_id)
+            contract.items = aggregate_items(json.loads(items, cls=ItemDecoder), valkey_client)
 
 
         else:
-            logger.warning(f"No items found for {contract.contract_id}")
+            logger.warning("No items found for %d", contract.contract_id)
 
     return contracts
 
-
-def aggregate_items(items: list[ContractItems]) -> list[ContractItems]:
+def aggregate_items(items: list[ContractItems], valkey_client: Valkey) -> list[ContractItems]:
     item_key: Callable[[ContractItems], int] = lambda item : item.item_type.id
     output = []
 
@@ -65,144 +57,106 @@ def aggregate_items(items: list[ContractItems]) -> list[ContractItems]:
 
     for key, elements in itertools.groupby(sorted(requested_items, key=item_key), key=item_key):
         count = sum(element.quantity for element in elements)
-        item = NamedItem(id=BaseID(key), name=bytes(contract_endpoints.valkey_client.get(f"names:{key}")).decode())  # type: ignore
+        redis_key = ITEM_NAME_KEY.substitute(id=key)
+        item = NamedItem(id=key, name=valkey_client.get(redis_key))  # type: ignore
         output.append(ContractItems(item_type=item, quantity=count, status=ItemStatus.REQUESTED))
         
     for key, elements in itertools.groupby(sorted(offered_items, key=item_key), key=item_key):
         count = sum(element.quantity for element in elements)
-        item = NamedItem(id=BaseID(key), name=bytes(contract_endpoints.valkey_client.get(f"names:{key}")).decode())  # type: ignore
+        redis_key = ITEM_NAME_KEY.substitute(id=key)
+        item = NamedItem(id=key, name=valkey_client.get(redis_key))  # type: ignore
         output.append(ContractItems(item_type=item, quantity=count, status=ItemStatus.OFFERED))
 
     return output
 
 
+def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI) -> Blueprint:
+    valkey_client = Valkey(valkey_host, decode_responses=True)
+    corp_id = CorpID(BaseID(corp_id))
 
-def get_fuel_contracts() -> list[Contract]:
-    MAGMATIC_GAS_TYPE_ID: int = 81143
-    SUPERIONIC_ICE_TYPE_ID: int = 81144
+    contract_endpoints = Blueprint("contracts", __name__)
+    contract_endpoints.register_blueprint(create_station_blueprint(esi, valkey_client), url_prefix="/stations")
 
-    assert contract_endpoints.corp_id is not None
-    contracts = get_outstanding_contracts(contract_endpoints.corp_id)
+    def get_fuel_contracts() -> list[Contract]:
+        MAGMATIC_GAS_TYPE_ID: int = 81143
+        SUPERIONIC_ICE_TYPE_ID: int = 81144
 
-    contracts = [
-        contract
-        for contract in contracts
-        if contract.type == ContractType.ITEM_EXCHANGE
-        and "skymule" not in contract.description.lower()
-        and not any(item.item_type.id in [MAGMATIC_GAS_TYPE_ID, SUPERIONIC_ICE_TYPE_ID] for item in contract.items)
-        # FIXME: This will filter out contracts that are trading fuel and it should not
-        and not any(item.status == ItemStatus.OFFERED for item in contract.items)
-    ]
+        contracts = get_outstanding_contracts(corp_id, valkey_client)
 
-    filtering(contracts)
-    return contracts
+        contracts = [
+            contract
+            for contract in contracts
+            if contract.type == ContractType.ITEM_EXCHANGE
+            and "skymule" not in contract.description.lower()
+            and not any(item.item_type.id in [MAGMATIC_GAS_TYPE_ID, SUPERIONIC_ICE_TYPE_ID] for item in contract.items)
+            # FIXME: This will filter out contracts that are trading fuel and it should not
+            and not any(item.status == ItemStatus.OFFERED for item in contract.items)
+        ]
 
-type FilterFunction = Callable[[Contract, Any | None], bool]
+        filtering(contracts)
+        return contracts
 
-def fuelInRange(contract: Contract, max: int | None) -> bool:
-    ISOTOPE_IDS = [16274, 17887, 17888, 17889]
-    fuel_items = [item for item in contract.items if item.item_type.id in ISOTOPE_IDS]
+    def filtering(contracts: list[Contract]) -> list[Contract]:
+        filter_data = cast(set[str], valkey_client.smembers("filters"))
+        filters = [ json.loads(x) for x in filter_data ]
 
-    if not max:
-        return True
+        all_filters = filter_functions(valkey_client)        
 
-    for fuel in fuel_items:
-        if fuel.quantity >= max:
-            return False
-        
-    return True
+        for contract in contracts:
+            for filter in filters:
+                filter_name: str = filter["name"]
 
-def isInfoPopulated(contract: Contract, _: Any | None) -> bool:
-    return len(contract.description) > 0
+                if not all_filters[filter_name](contract, filter.get("value", None)):
+                    if filter["type"] == "Error":
+                        contract.errors.append(filter_name)
+                    else:
+                        contract.warnings.append(filter_name)
 
-def isFuelRounded(contract: Contract, roundingValue: int | None) -> bool:
-    ISOTOPE_IDS = [16274, 17887, 17888, 17889]
-
-    if not roundingValue:
-        return True
-
-    fuel_items = [item for item in contract.items if item.item_type.id in ISOTOPE_IDS]
-
-    for fuel in fuel_items:
-        if fuel.quantity % roundingValue != 0:
-            return False
-        
-    return True
-
-def isStrontHigh(contract: Contract, max: int | None) -> bool:
-    STRONT_ID = 16275
-
-    if not max:
-        return True
-
-    total_stront: int = sum([item.quantity for item in contract.items if item.item_type.id == STRONT_ID])
-
-    return total_stront < max
-
-def inAllowedAlliances(contract: Contract, alliance_ids: list[str] | None) -> bool:
-    if not alliance_ids:
-        return True
-
-    return str(contract.alliance) in alliance_ids or contract.alliance is None
-
-filter_functions: dict[str, FilterFunction]  = {
-    "infoPopulated": isInfoPopulated,
-    "fuelHigh": fuelInRange,
-    "fuelRounding": isFuelRounded,
-    "strontHigh": isStrontHigh,
-    "allianceCheck": inAllowedAlliances
-}
+        return contracts
 
 
-def filtering(contracts: list[Contract]) -> list[Contract]:
+    @contract_endpoints.route("/by-location")
+    def aggregated() -> list[ByLocation]:
+        contracts = get_fuel_contracts()
 
-    filter_data = cast(set[bytes], contract_endpoints.valkey_client.smembers("filters"))
+        item_key: Callable[[ContractItems], BaseID] = lambda item: item.item_type.id
+        location_key: Callable[[Contract], BaseID] = lambda contract: contract.location.id
 
-    filters = [ json.loads(x) for x in filter_data ]
+        fuelling_areas = cast(set[str], valkey_client.smembers(STATION_KEY))
+        output = {
+            int(location_id): ByLocation(structure=NamedItem(id=BaseID(int(location_id)), name=cast(str, valkey_client.get(ITEM_NAME_KEY.substitute(id=location_id))))) 
+            for location_id in fuelling_areas }
 
-    for contract in contracts:
-        for filter in filters:
-            if not filter_functions[filter["name"]](contract, filter.get("value", None)):
-                if filter["type"] == "Error":
-                    contract.errors.append(filter["name"])
-                else:
-                    contract.warnings.append(filter["name"])
+        for location, contracts in itertools.groupby(sorted(contracts, key=location_key), key=location_key):
+            if fuelling_areas and location not in output:
+                print(f"Skipping {location} because it's not in {str(output)}")
+                continue
 
-    return contracts
+            output_location = output.get(location)
+            assert output_location is not None
+                
+            location_items = itertools.chain.from_iterable(contract.items for contract in contracts)
+            location_items = [
+                item for item in location_items if item.status == ItemStatus.REQUESTED
+            ]  # Only look for requested items
 
+            item_counts = []
+            for key, elements in itertools.groupby(sorted(location_items, key=item_key), key=item_key):
+                count = sum(element.quantity for element in elements)
+                valkey_key = ITEM_NAME_KEY.substitute(id=key)
+                item = NamedItem(id=BaseID(key), name=cast(str, valkey_client.get(valkey_key)))
+                item_counts.append(ContractItems(item_type=item, quantity=count, status=ItemStatus.REQUESTED))
 
-@contract_endpoints.route("/by-location")
-def aggregated() -> list[ByLocation]:
+            print(f"Updating with {str(item_counts)}")
+            output_location.items = item_counts
 
-    assert contract_endpoints.corp_id is not None
-    contracts = get_fuel_contracts()
-    output = []
-
-    item_key = lambda item: item.item_type.id
-    location_key = lambda contract: contract.location.id
-
-    for location, contracts in itertools.groupby(sorted(contracts, key=location_key), key=location_key):
-        location_name: str = bytes(contract_endpoints.valkey_client.get(f"names:{location}")).decode()  # type: ignore
-        new_location = ByLocation(structure=NamedItem(id=BaseID(location), name=location_name))
-
-        location_items = itertools.chain.from_iterable(contract.items for contract in contracts)
-        location_items = [
-            item for item in location_items if item.status == ItemStatus.REQUESTED
-        ]  # Only look for requested items
-
-        item_counts = []
-        for key, elements in itertools.groupby(sorted(location_items, key=item_key), key=item_key):
-            count = sum(element.quantity for element in elements)
-            item = NamedItem(id=BaseID(key), name=bytes(contract_endpoints.valkey_client.get(f"names:{key}")).decode())  # type: ignore
-            item_counts.append(ContractItems(item_type=item, quantity=count, status=ItemStatus.REQUESTED))
-
-        new_location.items = item_counts
-
-        output.append(new_location)
-
-    return output
+        assert None not in output.values()
+        return [x for x in output.values()] #type: ignore
 
 
-@contract_endpoints.route("/all")
-def all_fuel_contracts() -> list[Contract]:
-    return get_fuel_contracts()
+    @contract_endpoints.route("/all")
+    def all_fuel_contracts() -> list[Contract]:
+        return get_fuel_contracts()
+
+
+    return contract_endpoints

@@ -13,12 +13,12 @@ VALKEY_KEY = "filters"
 
 filters_endpoints = FiltersBlueprint("filters", __name__)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 @filters_endpoints.post("/")
 def add_filter():
     filters_endpoints.valkey_client.sadd(VALKEY_KEY, request.data)
     return redirect("/admin", code=303)
+
 
 @filters_endpoints.delete("/")
 def remove_filter():

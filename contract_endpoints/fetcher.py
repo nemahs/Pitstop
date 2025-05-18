@@ -1,9 +1,8 @@
 import json
 import logging
 import time
-from typing import Any, cast
+from typing import cast
 from collections.abc import Callable, Iterable, MutableMapping, Sequence
-from unittest.mock import Base
 
 from more_itertools import partition
 from valkey import Valkey

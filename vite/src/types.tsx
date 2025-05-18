@@ -58,5 +58,6 @@ export const FILTERS: FilterType[] = [
     new FilterType("fuelHigh", "Total fuel requested is less than", ValueTypes.NUMBER),
     new FilterType("strontHigh", "Total stront requested is less than", ValueTypes.NUMBER),
     new FilterType("infoPopulated", "Info is not empty"),
+    new FilterType("validStation", "Contract in a valid fuelling station")
 ];
 

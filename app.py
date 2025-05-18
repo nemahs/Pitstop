@@ -4,7 +4,7 @@ import sys
 import threading
 import platform
 from types import SimpleNamespace
-from typing import cast
+from typing import cast, Any
 
 # Monkey patch json encoder. We disable the type system here as monkey patching is...weird
 from json import JSONEncoder
@@ -17,21 +17,19 @@ _default.default = JSONEncoder().default # type:ignore
 JSONEncoder.default = _default # type: ignore
 
 
-
 from dotenv import dotenv_values
 from flask import Flask, flash, get_flashed_messages, redirect, request
 from flask_inertia import Inertia, render_inertia
 from flask_principal import Principal, identity_changed, Identity
 from flask_cors import CORS
-from flask_login import (LoginManager, current_user, login_required, login_user, logout_user)
+from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_vite import Vite
 from werkzeug.middleware.proxy_fix import ProxyFix
 from valkey import Valkey
 
 from .auth import AuthManager, User, admin_permissions
-from .contract_endpoints import contract_endpoints, get_outstanding_contracts, pull_contracts, CorpID, BaseID
+from .contract_endpoints import create_contract_blueprint, pull_contracts, CorpID, BaseID, get_outstanding_contracts
 from .contract_endpoints.fetcher import get_key
-from .data import DataSource
 from .ValkeyInformationProvider import ValkeyInformationProvider
 from .data.esi import ESI
 from .data.esi.corporation import open_corp_contract
@@ -55,7 +53,6 @@ Vite(app)
 principal = Principal(app)
 inertia = Inertia(app)
 
-app.register_blueprint(contract_endpoints, url_prefix="/fuel")
 
 
 @filters_endpoints.before_request
@@ -75,24 +72,25 @@ else:
 config = SimpleNamespace(dotenv_values(".env.development" if app.config["DEBUG"] else ".env"))
 
 valkey_host = config.VALKEY_HOST if config.VALKEY_HOST else "localhost"
+valkey_client = Valkey(valkey_host, decode_responses=True)
 
 user_auth = AuthManager(host=valkey_host)
 provider = ValkeyInformationProvider(app, valkey_host)
-datasource: DataSource = ESI(config.CLIENT_ID, config.CLIENT_SECRET)
+esi = ESI(config.CLIENT_ID, config.CLIENT_SECRET)
 
 if "vite" not in sys.argv:
     corp_id = CorpID(BaseID(int(config.CORP_ID)))
-    contract_endpoints.corp_id = corp_id
-    contract_endpoints.create_valkey_client(valkey_host if valkey_host else "localhost")
-    filters_endpoints.create_valkey_client(valkey_host if valkey_host else "localhost")
+    filters_endpoints.create_valkey_client(valkey_host)
     contracting_thread = threading.Thread(
         target=pull_contracts,
         name="Puller Thread",
-        args=(datasource, corp_id, valkey_host),
+        args=(esi, corp_id, valkey_host),
         daemon=True,
     )
 
     contracting_thread.start()
+    contract_endpoints = create_contract_blueprint(corp_id, valkey_host, esi)
+    app.register_blueprint(contract_endpoints, url_prefix="/fuel")
 
 #region Inertia helpers
 def get_current_user():
@@ -131,12 +129,12 @@ def login_endpoint():
         flash("ESI did not return a auth code", "error")
         return redirect("/")
 
-    response = datasource.get_tokens(login_code)
+    response = esi.get_tokens(login_code)
 
     token_data: dict[str, str] = decode_token(response.access_token)
     character_id: str = token_data["sub"].split(":")[2]
 
-    corp_id = datasource.get_character_corp(character_id)
+    corp_id = esi.get_character_corp(int(character_id))
     if corp_id != int(config.CORP_ID):
         flash(f"{token_data["name"]} is not in the necessary corp", "warning")
         app.logger.warning(f"Character {token_data['name']} attempted to log in")
@@ -172,7 +170,7 @@ def load_user(user_id):
 @login_required
 def contracts():
     def get_contracts():
-        return get_outstanding_contracts(corp_id)
+        return get_outstanding_contracts(corp_id, valkey_client)
 
     props = {"contracts": get_contracts}
     return render_inertia("Contracts", props)
@@ -180,11 +178,12 @@ def contracts():
 @app.post("/contracts/open")
 @login_required
 def open_contract():
-    options = request.json
+    options: dict[str, Any] = cast(dict[str, Any], request.json)
     print(f"Getting key for {current_user.id}")
-    key = get_key(cast(ESI, datasource), current_user.id, valkey_client=Valkey(valkey_host, decode_responses=True))
+    key = get_key(esi, current_user.id, valkey_client)
 
-    open_corp_contract(options["id"], key)
+    if "id" in options:
+        open_corp_contract(options["id"], key)
 
     return redirect(request.referrer, 303)
 
@@ -199,16 +198,12 @@ def fuelling():
 @admin_permissions.require(http_exception=403)
 def admin():
     props = {}
-    if valkey_host:
-        import valkey
-        valkey_client = valkey.Valkey(host=valkey_host)
+    filters : set[bytes] = cast(set[bytes], valkey_client.smembers("filters"))
 
-        filters : set[bytes] = cast(set[bytes], valkey_client.smembers("filters"))
-
-        if filters:
-            props.update({
-                "filters": [json.loads(x.decode()) for x in filters]
-            })
+    if filters:
+        props.update({
+            "filters": [json.loads(x) for x in filters]
+        })
 
     return render_inertia("Admin", props=props)
 

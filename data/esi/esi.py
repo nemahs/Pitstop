@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import Sequence
+from collections.abc import Sequence
 
 import requests
 
@@ -50,7 +50,7 @@ def get_structure_names(ids: Sequence[int], access_token: AccessToken):
             headers={"Authorization": f"Bearer {access_token}"},
         )
 
-        if response.status_code != 200:
+        if response.status_code != requests.codes.ok:
             logger.error(
                 f"Error occurred while fetching structure {id}, response code {response.status_code}, text {response.text}"
             )

@@ -18,6 +18,9 @@ services:
         traefik.http.middlewares.redirect.redirectscheme.permanent: "true"
         traefik.http.routers.pitstop.middlewares: "redirect"
 
+      update_config:
+          failure_action: "rollback"
+
     networks:
       - pitstop
       - incursions
@@ -39,6 +42,9 @@ services:
         traefik.http.routers.grafana.middlewares: "redirect"
         traefik.http.middlewares.redirect.redirectscheme.scheme: "https"
         traefik.http.middlewares.redirect.redirectscheme.permanent: "true"
+
+      update_config:
+          failure_action: "rollback"
 
     volumes:
       - grafana_data:/var/lib/grafana:rw

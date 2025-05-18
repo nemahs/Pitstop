@@ -13,6 +13,7 @@ class ESI(DataSource):
 
     from .auth import get_tokens, refresh_tokens
     from .character import get_character_corp, get_character_alliance
+    from .esi import get_structure_names, get_bulk_names
 
     def get_contracts(self, corp_id: int):
         raise NotImplementedError
