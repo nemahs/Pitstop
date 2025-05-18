@@ -129,7 +129,7 @@ def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI) -> Bluep
 
         for location, contracts in itertools.groupby(sorted(contracts, key=location_key), key=location_key):
             if fuelling_areas and location not in output:
-                print(f"Skipping {location} because it's not in {str(output)}")
+                logger.info(f"Skipping {location} because it's not in {str(output)}")
                 continue
 
             output_location = output.get(location)
@@ -148,10 +148,11 @@ def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI) -> Bluep
                 item_counts.append(ContractItems(item_type=item, quantity=count, status=ItemStatus.REQUESTED))
 
             print(f"Updating with {str(item_counts)}")
+            output_location.contract_count = len(location_items)
             output_location.items = item_counts
 
         assert None not in output.values()
-        return [x for x in output.values()] #type: ignore
+        return [x for x in output.values()] 
 
 
     @contract_endpoints.route("/all")

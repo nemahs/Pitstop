@@ -39,6 +39,7 @@ class NamedItem:
 @dataclass
 class ByLocation:
     structure: NamedItem
+    contract_count: int = 0
     items: list[Any] = field(default_factory=list)
 
 

@@ -33,7 +33,7 @@ from .contract_endpoints.fetcher import get_key
 from .ValkeyInformationProvider import ValkeyInformationProvider
 from .data.esi import ESI
 from .data.esi.corporation import open_corp_contract
-from .filters import filters_endpoints
+from .filters import create_filter_endpoints
 from .data.esi.auth import decode_token
 
 SECRET_KEY = "AFHFCHDSJCAS"
@@ -41,6 +41,8 @@ INERTIA_TEMPLATE = "index.html"
 
 logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler(sys.stdout))
+
+# region Flask setup
 
 app = Flask(__name__, static_folder="static")
 if platform.system() == "Windows":
@@ -54,14 +56,20 @@ principal = Principal(app)
 inertia = Inertia(app)
 
 
+def register_blueprints(app: Flask, valkey_client: Valkey, esi: ESI):
+    contract_endpoints = create_contract_blueprint(corp_id, valkey_host, esi)
+    app.register_blueprint(contract_endpoints, url_prefix="/fuel")
 
-@filters_endpoints.before_request
-@login_required
-@admin_permissions.require()
-def pre_filters():
-    pass
+    filter_endpoints = create_filter_endpoints(valkey_client)
 
-app.register_blueprint(filters_endpoints, url_prefix="/admin/filters")
+    @filter_endpoints.before_request
+    @admin_permissions.require()
+    def pre_filters():
+        pass
+
+    app.register_blueprint(filter_endpoints, url_prefix="/admin/filters")
+
+#endregion
 
 if app.config["DEBUG"]:
     CORS(app)
@@ -80,7 +88,6 @@ esi = ESI(config.CLIENT_ID, config.CLIENT_SECRET)
 
 if "vite" not in sys.argv:
     corp_id = CorpID(BaseID(int(config.CORP_ID)))
-    filters_endpoints.create_valkey_client(valkey_host)
     contracting_thread = threading.Thread(
         target=pull_contracts,
         name="Puller Thread",
@@ -89,8 +96,8 @@ if "vite" not in sys.argv:
     )
 
     contracting_thread.start()
-    contract_endpoints = create_contract_blueprint(corp_id, valkey_host, esi)
-    app.register_blueprint(contract_endpoints, url_prefix="/fuel")
+    valkey_client = Valkey(valkey_host, decode_responses=True)
+    register_blueprints(app, valkey_client, esi)
 
 #region Inertia helpers
 def get_current_user():

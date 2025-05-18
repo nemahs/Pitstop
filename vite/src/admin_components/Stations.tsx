@@ -3,7 +3,7 @@ import { Button, Fieldset, Flex, Group, NumberInput, Popover, Skeleton, Stack, T
 import { IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import useSWR from "swr";
-import { NamedItem } from "../types";
+import { LocationType, NamedItem } from "../types";
 
 const fetcher = (url: string | URL) => fetch(url).then((res) => res.json());
 
@@ -22,19 +22,20 @@ export function StationManagement() {
 
 function StationList() {
     const { data, isLoading }: {data: NamedItem[], isLoading: boolean} = useSWR("/fuel/stations/", fetcher, {refreshInterval: 5000});
+    const { data: locations, isLoading: locationsLoading} = useSWR("/fuel/by-location", fetcher, {refreshInterval: 5000});
 
     let station_elements: JSX.Element | JSX.Element[] = <></>;
 
-    if (!isLoading && data !== undefined) 
+    if (!isLoading && !locationsLoading && data !== undefined) 
     {
         station_elements = data.map((station: NamedItem) => (
-            <Station key={station.id} station={station} />
+            <Station key={station.id} station={station} contract_count={locations.find((x: LocationType) => x.structure.id == station.id)?.contract_count ?? 0} />
         ));
     }
 
     return (
         <Skeleton visible={isLoading} height={400}>
-            <Table withRowBorders striped withTableBorder>
+            <Table withColumnBorders withRowBorders striped withTableBorder>
                 <Table.Tbody>
                     {station_elements}
                 </Table.Tbody>
@@ -54,13 +55,17 @@ function AddStation() {
     );
 }
 
-function Station({ station }: {station: NamedItem}) {
+function Station({ station, contract_count = 0 }: {station: NamedItem, contract_count: number}) {
     const [opened, setOpened] = useState(false);
+
 
     return (
     <Table.Tr>
         <Table.Td style={{whiteSpace: "nowrap"}}>
             <Text>{station.name}</Text>
+        </Table.Td>
+        <Table.Td style={{whiteSpace: "nowrap"}}>
+            {contract_count} contracts
         </Table.Td>
         <Table.Td w="100%" maw={0}>
             <Popover radius={10} arrowSize={20} withArrow trapFocus opened={opened} onChange={setOpened} >

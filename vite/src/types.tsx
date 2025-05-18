@@ -31,6 +31,7 @@ export interface ContractType {
 
 export interface LocationType {
   structure: NamedItem;
+  contract_count: number;
   items: Array<ItemType>;
 }
 export enum ValueTypes {
