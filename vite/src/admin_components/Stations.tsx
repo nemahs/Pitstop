@@ -1,5 +1,5 @@
 import { router } from "@inertiajs/core";
-import { Button, Fieldset, Group, NumberInput, Popover, Skeleton, Stack, Table, Text } from "@mantine/core";
+import { Button, Fieldset, Flex, Group, NumberInput, Popover, Skeleton, Stack, Table, Text } from "@mantine/core";
 import { IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import useSWR from "swr";
@@ -47,10 +47,10 @@ function AddStation() {
     const [station_id, set_station_id] = useState<string | number>();
 
     return (
-    <Group>
-      <NumberInput value={station_id} onChange={set_station_id} allowDecimal={false} hideControls></NumberInput>  
-        <Button onClick={() => router.post(`/fuel/stations/${station_id}`, {}, { only: ['StationList'] })}>Add Station</Button>
-    </Group>
+    <Flex align={"flex-end"} gap={"sm"}>
+      <NumberInput value={station_id} onChange={set_station_id} allowDecimal={false} label="Station ID" hideControls></NumberInput>  
+      <Button onClick={() => router.post(`/fuel/stations/${station_id}`, {}, { only: ['StationList'] })}>Add Station</Button>
+    </Flex>
     );
 }
 
@@ -63,7 +63,7 @@ function Station({ station }: {station: NamedItem}) {
             <Text>{station.name}</Text>
         </Table.Td>
         <Table.Td w="100%" maw={0}>
-            <Popover withArrow trapFocus opened={opened} onChange={setOpened} >
+            <Popover radius={10} arrowSize={20} withArrow trapFocus opened={opened} onChange={setOpened} >
                 <Popover.Target>
                     <Button color="red" size="sm" leftSection={<IconTrash />} onClick={() => setOpened(!opened)}>Remove</Button>
                 </Popover.Target>

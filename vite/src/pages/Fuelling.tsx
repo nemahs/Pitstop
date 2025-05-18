@@ -17,10 +17,11 @@ function Location({data}: {data: LocationType}) {
   return (
     <Card radius="lg">
       <Card.Section pt={10} withBorder inheritPadding>
-        <Title order={4}>{data.structure.name}</Title>
+        <Title order={4} ta="center">{data.structure.name}</Title>
       </Card.Section>
       <Card.Section pt={10} pb={10} inheritPadding>
-        {items}
+        {items.length > 0 && items || 
+        <Text ta="center" c="green">No contracts at this location</Text>}
       </Card.Section>
     </Card>);
 }

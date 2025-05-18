@@ -1,5 +1,5 @@
 import { router } from "@inertiajs/react";
-import { Button, Fieldset, Group, Input, NativeSelect, NumberInput, SegmentedControl, Stack, Table, TagsInput, TextInput } from "@mantine/core";
+import { Button, Fieldset, Group, Input, NativeSelect, NumberInput, Popover, SegmentedControl, Stack, Table, TagsInput, Text, TextInput } from "@mantine/core";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { FILTERS, ValueTypes } from "../types";
@@ -11,16 +11,33 @@ export interface SavedFilter {
 }
 
 export default FilterManagement;
+const ERROR_TEXT = "⛔ Error";
+const WARNING_TEXT = "⚠️ Warning";
 
 function FilterDisplay({filter}: {filter: SavedFilter})
 {
+    const [opened, setOpened] = useState(false);
+
     const filter_key = JSON.stringify(filter);
     return (<Table.Tr>
-            <Table.Td width={110}>{filter.type === "Error" ? "⛔ Error" : "⚠️ Warning"}</Table.Td>
+            <Table.Td width={110}>{filter.type === "Error" ? ERROR_TEXT : WARNING_TEXT}</Table.Td>
             <Table.Td>{FILTERS.find((x) => x.value === filter.name)?.label}</Table.Td>
             <Table.Td>{filter.value?.toLocaleString()}</Table.Td>
             <Table.Td width={30}><Button disabled size="compact-xs" variant="transparent"><IconPencil /></Button></Table.Td>
-            <Table.Td width={30}><Button size="compact-xs" onClick={() => router.delete("/admin/filters", {data: {filter: filter_key}, preserveUrl: true} )}  variant="transparent"><IconTrash color="darkred" /></Button></Table.Td>
+            <Table.Td width={30}>
+                <Popover radius={10} withArrow trapFocus arrowSize={20} opened={opened} onChange={setOpened}>
+                    <Popover.Target>
+                        <Button size="compact-xs" onClick={() => setOpened(!opened)} variant="transparent"><IconTrash color="darkred" /></Button>
+                    </Popover.Target>
+                    <Popover.Dropdown>
+                        <Text ta="center" pb={5}>Are you sure?</Text>
+                        <Group>
+                            <Button color="teal" onClick={() => router.delete("/admin/filters", {data: {filter: filter_key}})}>Yes</Button>
+                            <Button onClick={() => setOpened(false)}>No</Button>
+                        </Group>
+                    </Popover.Dropdown>
+                </Popover>
+            </Table.Td>
         </Table.Tr>);
 }
 
@@ -35,7 +52,7 @@ export function FilterManagement({filters}: {filters: SavedFilter[]}) {
             <AddFilterForm />
 
             <Fieldset legend="Current filters">
-                <Table withTableBorder>
+                <Table withTableBorder striped>
                     <Table.Thead>
                         <Table.Tr>
                             <Table.Th>Severity</Table.Th>
@@ -62,12 +79,13 @@ function AddFilterForm() {
             <Input.Wrapper label="Filter Type">
                 <SegmentedControl
                     ml={15}
+                    mb={10}
                     withItemsBorders={false}
                     value={filter_type}
                     onChange={set_filter_type}
                     data={[
-                        { label: "⚠️ Warning", value: "Warning" },
-                        { label: "⛔ Error", value: "Error" }]}
+                        { label: WARNING_TEXT, value: "Warning" },
+                        { label: ERROR_TEXT, value: "Error" }]}
                 />
             </Input.Wrapper>
             <Group>
