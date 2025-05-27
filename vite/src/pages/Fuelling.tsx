@@ -1,8 +1,9 @@
-import { Card, Group, Image, Loader, Notification, SimpleGrid, Skeleton, Tabs, Text, Title } from '@mantine/core';
+import { Card, Chip, Flex, Group, Image, Loader, NativeSelect, Notification, SimpleGrid, Skeleton, Tabs, Text, Title } from '@mantine/core';
 import { IconCheck } from '@tabler/icons-react';
+import { useState } from 'react';
 import useSWR from 'swr';
 import { ContractType, LocationType } from '../types.tsx';
-import { Contract } from './Contracts.tsx';
+import { Contract, filterNames } from './Contracts.tsx';
 
 const fetcher = (url: string | URL) => fetch(url).then((res) => res.json());
 
@@ -26,13 +27,73 @@ function Location({data}: {data: LocationType}) {
     </Card>);
 }
 
+function Filtering({filter, setFilter, data}: {filter: any, setFilter: any, data: string[]}) {
+  return (
+    <NativeSelect value={filter} onChange={(event) => setFilter(event.currentTarget.value)}
+      data={data}
+      label="Filter by contract location"
+     />
+  );
+}
+
+function ErrorFiltering({filter, setFilter, errors, warnings}: {filter: any, setFilter: any, errors: string[], warnings: string[]}) {
+
+  let error_chips = errors.map((error) => (
+    <Chip color='red' key={error} value={error}>{filterNames.get(error)}</Chip>
+  ));
+
+  let warning_chips = warnings.map((warning) => (
+    <Chip color='yellow' key={warning} value={warning}>{filterNames.get(warning)}</Chip>
+  ));
+
+  return (
+    <Chip.Group multiple value={filter} onChange={setFilter}>
+      <Group mt={23} pl={5}>
+        <Chip value="normal">Normal Contracts</Chip>
+        {error_chips}
+        {warning_chips}
+      </Group>
+    </Chip.Group>
+  );
+}
+
+const ALL_LOCATIONS: string = "All Locations"
 
 function AllFuelContracts() {
-  const { data, isLoading } = useSWR("/fuel/all", fetcher, {refreshInterval: 5000});
-  let contract_elements = <></>;
+  const { data, isLoading }: {data: ContractType[], isLoading: boolean} = useSWR("/fuel/all", fetcher, {refreshInterval: 5000});
+  const [location_filter, set_location_filter] = useState(ALL_LOCATIONS);
+  const [error_filter, set_error_filter] = useState(["normal", ...filterNames.keys() ]);
+  let location_data: string[] = [];
+  let contract_elements: JSX.Element | JSX.Element[] = <></>;
+
+  let errors: string[] = [];
+  let warnings: string[] = [];
+
   if (!isLoading)
   {
-    contract_elements = data.map((data: ContractType) => (
+    let filtered = data;
+
+    errors = [...new Set(data.flatMap((contract) => contract.errors))];
+    warnings = [...new Set(data.flatMap((contract) => contract.warnings))];
+
+    const locations = new Set(data.map((contract) => contract.location.name));
+    location_data = Array.from(locations);
+    location_data.unshift(ALL_LOCATIONS)
+
+    if (location_filter !== ALL_LOCATIONS)
+    {
+      filtered = data.filter(x => x.location.name === location_filter);
+    }
+
+
+    filtered = filtered.filter(x => x.errors.some(y => error_filter.includes(y)) || x.errors.length == 0);
+    filtered = filtered.filter(x => x.warnings.some(y => error_filter.includes(y)) || x.warnings.length == 0);
+    if (!error_filter.includes("normal"))
+    {
+      filtered = filtered.filter(x => (x.errors.length > 0 || x.warnings.length > 0))
+    }
+
+    contract_elements = filtered.map((data: ContractType) => (
       <Contract key={data.id} contract={data} />
     ));
   }
@@ -42,7 +103,11 @@ function AllFuelContracts() {
     <>
     {isLoading && <Loader />}
     <Skeleton visible={isLoading} height={400}>
-      <Group justify='flex-end' pr={5}><Text size="xs">Double-click a contract to open it on your logged in user</Text></Group>
+      <Flex align={"center"} pl={10}>
+        {!isLoading && <Filtering data={location_data}  filter={location_filter} setFilter={set_location_filter} />}
+        <ErrorFiltering filter={error_filter} setFilter={set_error_filter} errors={errors} warnings={warnings} />
+      </Flex>
+      <Group justify='flex-start' pl={10}><Text size="xs">Double-click a contract to open it on your logged in user</Text></Group>
       {!isLoading && data.length == 0 &&
         <Notification color="teal" icon={<IconCheck size={20} />} title="No fuel contracts, good work!" withCloseButton={false} />
       }

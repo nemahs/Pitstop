@@ -17,14 +17,14 @@ function Item({item}: {item: ItemType}) {
   );
 }
 
-const filterNames: Record<string, string> = {
-  "fuelRounding": "Fuel not rounded correctly",
-  "fuelHigh": "Fuel amounts too high",
-  "strontHigh": "Stront amounts too high",
-  "allianceCheck": "Contractor not in the correct alliance",
-  "infoPopulated": "No description given",
-  "validStation": "Not in a valid fuelling station"
-}
+export const filterNames: Map<string, string> = new Map([
+  ["fuelRounding", "Fuel not rounded correctly"],
+  ["fuelHigh", "Fuel amounts too high"],
+  ["strontHigh", "Stront amounts too high"],
+  ["allianceCheck", "Contractor not in the correct alliance"],
+  ["infoPopulated", "No description given"],
+  ["validStation", "Not in a valid fuelling station"]
+]);
 
 export function Contract({contract, disableFilters = false}: {contract: ContractType, disableFilters?: boolean}) {
   if (contract.items === undefined) {
@@ -38,10 +38,10 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
   const received_items = to_get.map((item: ItemType) => (<Item key={item.item_type.id} item={item} />));
 
 
-  const errors = contract.errors.map((error: string, i) => (<ListItem key={i}>{filterNames[error]}</ListItem>));
-  const warnings = contract.warnings.map((warning: string, i) => (<ListItem key={i}>{filterNames[warning]}</ListItem>));
+  const errors = contract.errors.map((error: string, i) => (<ListItem key={i}>{filterNames.get(error)}</ListItem>));
+  const warnings = contract.warnings.map((warning: string, i) => (<ListItem key={i}>{filterNames.get(warning)}</ListItem>));
 
-  const wordStart = / ./g;
+  //const wordStart = / ./g;
 
   return (
     <Card styles={{root: {cursor: 'pointer'}}} radius='lg' onDoubleClick={() => router.post("/contracts/open", {'id': contract.id}, {preserveScroll: true, preserveState: true})}>
@@ -55,10 +55,13 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
         <Title order={6}>Location:</Title>
         <Text truncate="end">{contract.location.name}</Text>
       </Group>
+    
+    {/*
       <Group gap="xs">
-        <Title order={6}>Type:</Title>
+      <Title order={6}>Type:</Title>
         {contract.type.replaceAll("_", " ").replace(/^./, (char: string) => char.toUpperCase()).replaceAll(wordStart, (char: string) => char.toUpperCase())}
       </Group>
+      */}
 
       <Group gap="xs">
         <Title order={6}>Description:</Title>
