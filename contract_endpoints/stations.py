@@ -5,9 +5,9 @@ from flask import Blueprint, redirect, request
 from valkey import Valkey
 
 from .dataclasses import NamedItem, UserID, BaseID
-from ..data.esi import ESI
-from ..data.esi.esi import get_structure_names
-from ..auth import admin_permissions
+from data.esi import ESI
+from data.esi.esi import get_structure_names
+from auth import admin_permissions
 
 
 logger = Logger(__name__)
@@ -30,7 +30,7 @@ def create_station_blueprint(esi: ESI, valkey_client: Valkey) -> Blueprint:
             character_id = UserID(BaseID(character_id))
             access_token = get_key(esi, character_id, valkey_client)
 
-            new_names = get_structure_names(missing_station_names, access_token)[0]
+            new_names = get_structure_names(missing_station_names, access_token)
             station_names.update(new_names)
 
         return [NamedItem(name, key) for key, name in station_names.items()]

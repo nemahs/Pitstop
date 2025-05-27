@@ -24,7 +24,7 @@ def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
         return True
 
     def isInfoPopulated(contract: Contract, _: Any | None) -> bool:
-        return len(contract.description) > 0
+        return contract.description is not None and len(contract.description) > 0
 
     def isFuelRounded(contract: Contract, roundingValue: int | None) -> bool:
         ISOTOPE_IDS = [16274, 17887, 17888, 17889]
@@ -54,7 +54,7 @@ def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
         if not alliance_ids:
             return True
 
-        return str(contract.alliance) in alliance_ids or contract.alliance is None
+        return contract.alliance is None or str(contract.alliance.id) in alliance_ids
 
     def inValidStation(contract: Contract, _: Any | None) -> bool:
         fuelling_stations: set[str] = cast(set[str], valkey_client.smembers(STATION_KEY))

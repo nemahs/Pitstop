@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from enum import Enum
 import json
 import logging
 from datetime import datetime
@@ -9,8 +11,23 @@ from ..typing import AccessToken
 
 logger = logging.getLogger(__name__)
 
+class ESIEntity(str, Enum):
+    ALLIANCE = "alliance"
+    CORPORATION = "corporation"
+    CONSTELLATION = "constellation"
+    CHARACTER = "character"
+    INVENTORY = "inventory"
+    REGION = "region"
+    SOLAR_SYSTEM = "solar_system"
+    STATION = "station"
+    FACTION = "faction"
 
-def get_bulk_names(ids: Sequence[int]):
+@dataclass
+class Name:
+    name: str
+    category: ESIEntity
+
+def get_bulk_names(ids: Sequence[int]) -> dict[int, Name]:
     BATCH_SIZE = 500
     output = {}
 
@@ -30,17 +47,17 @@ def get_bulk_names(ids: Sequence[int]):
             )
             continue
 
-        output.update({id["id"]: id["name"] for id in response.json()})
+        output.update({id["id"]: Name(name=id["name"], category=id["category"]) for id in response.json()})
 
     return output
 
 
-def get_structure_names(ids: Sequence[int], access_token: AccessToken):
+def get_structure_names(ids: Sequence[int], access_token: AccessToken) -> dict[int, str]:
     # All location numbers above this are player structures, all below are stations
     STRUCTURE_ID_START: int = 1000000000
 
     # Get station names through the normal bulk endpoint
-    output = get_bulk_names([id for id in ids if id < STRUCTURE_ID_START])
+    output = {x: y.name for x,y in get_bulk_names([id for id in ids if id < STRUCTURE_ID_START]).items()}
 
     ids = [id for id in ids if id >= STRUCTURE_ID_START]
 

@@ -10,7 +10,7 @@ from .utils import ESIError, ESI_BASE_URL, auth_headers
 logger = logging.getLogger(__name__)
 
 
-class Status(str, Enum):
+class ContractStatus(str, Enum):
     OUTSTANDING = "outstanding"
     IN_PROGRESS = "in_progress"
     FINISHED_ISSUER = "finished_issuer"
@@ -22,6 +22,12 @@ class Status(str, Enum):
     DELETED = "deleted"
     REVERSED = "reversed"
 
+class ContractType(str, Enum):
+    UNKNOWN = "unknown"
+    ITEM_EXCHANGE = "item_exchange"
+    AUCTION = "auction"
+    COURIER = "courier"
+    LOAN = "loan"
 
 class ESIContract(TypedDict, total=False):
     acceptor_id: Required[int]
@@ -34,16 +40,27 @@ class ESIContract(TypedDict, total=False):
     date_expired: Required[str]
     date_issued: Required[str]
 
+    for_corporation: Required[bool]
+
     start_location_id: int
     end_location_id: int
 
-    status: Required[Status]
+    status: Required[ContractStatus]
+    type: Required[ContractType]
+
+    title: str
 
     price: float
     reward: float
 
+class ESIItem(TypedDict, total=False):
+    is_included: Required[bool]
+    is_singleton: Required[bool]
+    quantity: Required[int]
+    record_id: Required[int]
+    type_id: Required[int]
 
-def get_corp_contracts(corp_id: int, access_token: AccessToken) -> list[ESIContract]:
+def get_corp_contracts(_, corp_id: int, access_token: AccessToken) -> list[ESIContract]:
     response = requests.get(
         f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/",
         headers=auth_headers(access_token),
@@ -73,7 +90,7 @@ def get_corp_contracts(corp_id: int, access_token: AccessToken) -> list[ESIContr
     return contracts
 
 
-def get_corp_contract_items(corp_id: int, contract_id: int, access_token: AccessToken) -> list[Any]:
+def get_corp_contract_items(_, corp_id: int, contract_id: int, access_token: AccessToken) -> list[ESIItem]:
     response = requests.get(
         f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/{contract_id}/items/",
         headers=auth_headers(access_token),

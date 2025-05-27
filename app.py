@@ -1,22 +1,12 @@
 import json
 import logging
 import sys
+
+sys.path += "."
 import threading
 import platform
 from types import SimpleNamespace
 from typing import cast, Any
-
-# Monkey patch json encoder. We disable the type system here as monkey patching is...weird
-from json import JSONEncoder
-
-
-def _default(self, obj):
-    return getattr(obj.__class__, "to_json", _default.default)(obj) # type: ignore
-
-_default.default = JSONEncoder().default # type:ignore
-JSONEncoder.default = _default # type: ignore
-
-
 from dotenv import dotenv_values
 from flask import Flask, flash, get_flashed_messages, redirect, request
 from flask_inertia import Inertia, render_inertia
@@ -24,6 +14,7 @@ from flask_principal import Principal, identity_changed, Identity
 from flask_cors import CORS
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_vite import Vite
+import sqlalchemy as sa
 from werkzeug.middleware.proxy_fix import ProxyFix
 from valkey import Valkey
 
@@ -57,7 +48,7 @@ inertia = Inertia(app)
 
 
 def register_blueprints(app: Flask, valkey_client: Valkey, esi: ESI):
-    contract_endpoints = create_contract_blueprint(corp_id, valkey_host, esi)
+    contract_endpoints = create_contract_blueprint(corp_id, valkey_host, esi, engine)
     app.register_blueprint(contract_endpoints, url_prefix="/fuel")
 
     filter_endpoints = create_filter_endpoints(valkey_client)
@@ -80,7 +71,7 @@ else:
 config = SimpleNamespace(dotenv_values(".env.development" if app.config["DEBUG"] else ".env"))
 
 valkey_host = config.VALKEY_HOST if config.VALKEY_HOST else "localhost"
-valkey_client = Valkey(valkey_host, decode_responses=True)
+postgres_host = config.POSTGRES_HOST if config.POSTGRES_HOST else "localhost"
 
 user_auth = AuthManager(host=valkey_host)
 provider = ValkeyInformationProvider(app, valkey_host)
@@ -88,16 +79,18 @@ esi = ESI(config.CLIENT_ID, config.CLIENT_SECRET)
 
 if "vite" not in sys.argv:
     corp_id = CorpID(BaseID(int(config.CORP_ID)))
+    engine = sa.create_engine(f"postgresql://postgres:wuagmeister@{postgres_host}")
     contracting_thread = threading.Thread(
         target=pull_contracts,
         name="Puller Thread",
-        args=(esi, corp_id, valkey_host),
+        args=(esi, corp_id, valkey_host, engine),
         daemon=True,
     )
 
     contracting_thread.start()
     valkey_client = Valkey(valkey_host, decode_responses=True)
     register_blueprints(app, valkey_client, esi)
+
 
 #region Inertia helpers
 def get_current_user():
@@ -177,7 +170,7 @@ def load_user(user_id):
 @login_required
 def contracts():
     def get_contracts():
-        return get_outstanding_contracts(corp_id, valkey_client)
+        return get_outstanding_contracts(corp_id, engine)
 
     props = {"contracts": get_contracts}
     return render_inertia("Contracts", props)
@@ -211,6 +204,11 @@ def admin():
         props.update({
             "filters": [json.loads(x) for x in filters]
         })
+    else:
+        props.update({
+            "filters": []
+        })
+
 
     return render_inertia("Admin", props=props)
 

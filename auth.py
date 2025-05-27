@@ -2,7 +2,7 @@ from enum import IntFlag, auto, verify, UNIQUE
 
 import valkey
 
-from .data.typing import AccessToken, RefreshToken
+from data.typing import AccessToken, RefreshToken
 from flask_principal import Permission, RoleNeed
 
 @verify(UNIQUE)

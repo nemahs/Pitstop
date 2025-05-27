@@ -1,18 +1,20 @@
 import itertools
 import json
 import logging
-from datetime import datetime
 from string import Template
-from typing import Any, cast
+from typing import cast
 from collections.abc import Callable
 
 from valkey import Valkey
 from flask import Blueprint
 
 from .dataclasses import *
-from .typing import *
 from .filters import filter_functions
-from ..data.esi import ESI
+from data.esi import ESI
+import database as db
+import sqlalchemy as sa
+import sqlalchemy.orm as so
+from .typing import *
 from .stations import create_station_blueprint, STATION_KEY
 
 logger = logging.getLogger(__name__)
@@ -20,57 +22,15 @@ CONTRACT_LIST_KEY = "contracts"
 CONTRACT_ITEMS_KEY = Template(f"{CONTRACT_LIST_KEY}:$id")
 ITEM_NAME_KEY = Template("names:$id")
 
-def get_outstanding_contracts(corp_id: CorpID, valkey_client: Valkey) -> list[Contract]:
-    contract_data: Any | None = valkey_client.get(CONTRACT_LIST_KEY)
-    contracts: list[Contract] = json.loads(contract_data, cls=ContractDecoder) if contract_data else []
-    logger.debug("Parsed %d contracts out of Valkey", len(contracts))
-
-    contracts = [
-        contract
-        for contract in contracts
-        if contract.status == ContractStatus.OUTSTANDING
-        and (contract.assignee.id == int(corp_id) or contract.creator.id == int(corp_id))
-        and contract.date_expired > datetime.now()
-    ]
-
-    logger.debug("%d contracts remaining after filtering", len(contracts))
-
-    for contract in contracts:
-        items: Any | None = valkey_client.get(CONTRACT_ITEMS_KEY.substitute(id=contract.contract_id))
-
-        if items:
-            logger.debug("Found items for contract %d", contract.contract_id)
-            contract.items = aggregate_items(json.loads(items, cls=ItemDecoder), valkey_client)
-
-
-        else:
-            logger.warning("No items found for %d", contract.contract_id)
-
-    return contracts
-
-def aggregate_items(items: list[ContractItems], valkey_client: Valkey) -> list[ContractItems]:
-    item_key: Callable[[ContractItems], int] = lambda item : item.item_type.id
-    output = []
-
-    requested_items = [item for item in items if item.status == ItemStatus.REQUESTED]
-    offered_items = [item for item in items if item.status == ItemStatus.OFFERED]
-
-    for key, elements in itertools.groupby(sorted(requested_items, key=item_key), key=item_key):
-        count = sum(element.quantity for element in elements)
-        redis_key = ITEM_NAME_KEY.substitute(id=key)
-        item = NamedItem(id=key, name=valkey_client.get(redis_key))  # type: ignore
-        output.append(ContractItems(item_type=item, quantity=count, status=ItemStatus.REQUESTED))
+def get_outstanding_contracts(corp_id: CorpID, sql: sa.Engine) -> list[Contract]:
+    with so.Session(sql) as session:
+        new_contracts = list(session.scalars(sa.select(db.Contract).
+                                            where(db.Contract.status == db.ContractStatus.OUTSTANDING).
+                                            where(sa.or_(db.Contract.contracted_to == corp_id, db.Contract.contractor_id == corp_id))))
         
-    for key, elements in itertools.groupby(sorted(offered_items, key=item_key), key=item_key):
-        count = sum(element.quantity for element in elements)
-        redis_key = ITEM_NAME_KEY.substitute(id=key)
-        item = NamedItem(id=key, name=valkey_client.get(redis_key))  # type: ignore
-        output.append(ContractItems(item_type=item, quantity=count, status=ItemStatus.OFFERED))
+        return [Contract.from_database(x) for x in new_contracts]
 
-    return output
-
-
-def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI) -> Blueprint:
+def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI, sql: sa.Engine) -> Blueprint:
     valkey_client = Valkey(valkey_host, decode_responses=True)
     corp_id = CorpID(BaseID(corp_id))
 
@@ -81,12 +41,12 @@ def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI) -> Bluep
         MAGMATIC_GAS_TYPE_ID: int = 81143
         SUPERIONIC_ICE_TYPE_ID: int = 81144
 
-        contracts = get_outstanding_contracts(corp_id, valkey_client)
+        contracts = get_outstanding_contracts(corp_id, sql)
 
         contracts = [
             contract
             for contract in contracts
-            if contract.type == ContractType.ITEM_EXCHANGE
+            if contract.type in (ContractType.ITEM_EXCHANGE, ContractType.UNKNOWN)
             and "skymule" not in contract.description.lower()
             and not any(item.item_type.id in [MAGMATIC_GAS_TYPE_ID, SUPERIONIC_ICE_TYPE_ID] for item in contract.items)
             # FIXME: This will filter out contracts that are trading fuel and it should not
@@ -123,6 +83,9 @@ def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI) -> Bluep
         location_key: Callable[[Contract], BaseID] = lambda contract: contract.location.id
 
         fuelling_areas = cast(set[str], valkey_client.smembers(STATION_KEY))
+        if not fuelling_areas:
+            return []
+
         output = {
             int(location_id): ByLocation(structure=NamedItem(id=BaseID(int(location_id)), name=cast(str, valkey_client.get(ITEM_NAME_KEY.substitute(id=location_id))))) 
             for location_id in fuelling_areas }
