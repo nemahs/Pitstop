@@ -35,7 +35,7 @@ def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI, sql: sa.
     corp_id = CorpID(BaseID(corp_id))
 
     contract_endpoints = Blueprint("contracts", __name__)
-    contract_endpoints.register_blueprint(create_station_blueprint(esi, valkey_client), url_prefix="/stations")
+    contract_endpoints.register_blueprint(create_station_blueprint(esi, valkey_client, sql), url_prefix="/stations")
 
     def get_fuel_contracts() -> list[Contract]:
         MAGMATIC_GAS_TYPE_ID: int = 81143
@@ -86,9 +86,9 @@ def create_contract_blueprint(corp_id: int, valkey_host: str, esi: ESI, sql: sa.
         if not fuelling_areas:
             return []
 
-        output = {
-            int(location_id): ByLocation(structure=NamedItem(id=BaseID(int(location_id)), name=cast(str, valkey_client.get(ITEM_NAME_KEY.substitute(id=location_id))))) 
-            for location_id in fuelling_areas }
+        with so.Session(sql) as session:
+            output = session.execute(sa.select(db.Structure.id, db.Structure.name).where(db.Structure.id.in_(fuelling_areas)))
+            output = {id: ByLocation(structure=NamedItem(id=BaseID(id), name=name)) for id, name in output}
 
         for location, contracts in itertools.groupby(sorted(contracts, key=location_key), key=location_key):
             if fuelling_areas and location not in output:

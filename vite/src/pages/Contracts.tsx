@@ -26,6 +26,7 @@ export const filterNames: Map<string, string> = new Map([
   ["validStation", "Not in a valid fuelling station"]
 ]);
 
+
 export function Contract({contract, disableFilters = false}: {contract: ContractType, disableFilters?: boolean}) {
   if (contract.items === undefined) {
     console.error(`Bad contract: ${JSON.stringify(contract)}`)
@@ -41,10 +42,16 @@ export function Contract({contract, disableFilters = false}: {contract: Contract
   const errors = contract.errors.map((error: string, i) => (<ListItem key={i}>{filterNames.get(error)}</ListItem>));
   const warnings = contract.warnings.map((warning: string, i) => (<ListItem key={i}>{filterNames.get(warning)}</ListItem>));
 
-  //const wordStart = / ./g;
+  const onClick = () => {
+    if (to_give.length > 0) {
+      navigator.clipboard.writeText(to_give.at(0)?.quantity?.toString() ?? "ERROR").then(() => console.debug("Added to clipboard"));
+    }
+ 
+    router.post("/contracts/open", {'id': contract.id}, {preserveScroll: true, preserveState: true});
+  }
 
   return (
-    <Card styles={{root: {cursor: 'pointer'}}} radius='lg' onDoubleClick={() => router.post("/contracts/open", {'id': contract.id}, {preserveScroll: true, preserveState: true})}>
+    <Card styles={{root: {cursor: 'pointer'}}} radius='lg' onDoubleClick={onClick}>
       <Group gap="xs">
         <Title order={6}>From:</Title>
         {contract.creator.name}

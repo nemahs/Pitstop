@@ -19,7 +19,7 @@ from .typing import *
 import database as db
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARN)
 
 
 def pull_contracts(esi: ESI, corp_id: CorpID, valkey_host: str, sql: sa.Engine):
@@ -116,6 +116,9 @@ def pull_contracts(esi: ESI, corp_id: CorpID, valkey_host: str, sql: sa.Engine):
             time.sleep(30)
         except ValkeyError as e:
             logger.error("Ran into a valkey issue, waiting to try again, message: %s", e)
+            time.sleep(30)
+        except Exception as e:
+            logger.error("Ran into an unknown error, waiting, then trying again. Error: %s", e)
             time.sleep(30)
 
 

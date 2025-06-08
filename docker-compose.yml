@@ -66,6 +66,8 @@ services:
     image: postgres:alpine
     environment:
       POSTGRES_PASSWORD: wuagmeister
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     ports:
       - 5432:5432
     networks:
@@ -87,6 +89,7 @@ services:
 volumes:
   valkey_data:
   grafana_data:
+  postgres_data:
 
 secrets:
   app.config:
