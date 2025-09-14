@@ -1,22 +1,25 @@
-# syntax=docker/dockerfile:1.7-labs
-FROM python AS builder
+FROM python:3.13 AS builder
 
-
-RUN apt update && apt install -y nodejs npm 
+# TODO: Use pure vite instead of flask-vite
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+     apt-get update && apt-get install --no-install-recommends -y nodejs npm 
 WORKDIR /app
-COPY . /app/
-ENV FLASK_DEBUG=0
-RUN --mount=type=secret,id=.env,dst=/app/.env pip install --no-cache-dir -r /app/requirements.txt && flask vite install
-RUN --mount=type=secret,id=.env,dst=/app/.env flask vite build
+COPY vite/ /app/
+RUN npm install --global vite@latest && npm install 
+RUN vite build
 
 
-FROM python:slim as production
+FROM python:slim AS production
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 EXPOSE 80/tcp
-
-COPY --exclude=**/vite . /app
-RUN pip install --no-cache-dir -r /app/requirements.txt
-COPY --from=builder /app/vite/dist /app/vite/dist
-
 WORKDIR /app
-CMD [ "flask", "run", "--port", "80", "--host", "0.0.0.0"]
+
+COPY pyproject.toml *.py *.ini templates/ static/ data/ contract_endpoints/ alembic/ /app/
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --no-dev --compile-bytecode
+COPY --from=builder /app/dist /app/vite/dist
+
+#HEALTHCHECK CMD [ "wget", "-q", "localhost" ]
+# TODO: Switch to gunicorn
+CMD [ "uv", "run", "flask", "run", "--port", "80", "--host", "0.0.0.0"]

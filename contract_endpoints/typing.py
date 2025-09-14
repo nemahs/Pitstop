@@ -1,14 +1,25 @@
-from typing import NewType
-from typing import NotRequired
+from typing import NewType, NotRequired
+
 from data.esi.corporation import ESIContract, ESIItem
 
-BaseID = NewType("BaseID", int)
-UserID = NewType("UserID", BaseID)
-CorpID = NewType("CorpID", BaseID)
-ContractID = NewType("ContractID", BaseID)
-StructureID = NewType("StructureID", BaseID)
-TypeID = NewType("TypeID", BaseID)
 
+class BaseID(int):
+    pass
+
+class UserID(BaseID):
+    pass
+
+class CorpID(BaseID):
+    pass
+
+class ContractID(BaseID):
+    pass
+
+class StructureID(BaseID):
+    pass
+
+class TypeID(BaseID):
+    pass
 
 class EnrichedContract(ESIContract, total=False):
     assignee_name: str

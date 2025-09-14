@@ -1,0 +1,39 @@
+[project]
+name = "Pitstop"
+version = "0.1.0"
+description = "Website for the Pitstop SIG to assist with fuel contracts"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.16.0",
+    "flask>=3.1.0",
+    "flask-cors>=5.0.0",
+    "flask-inertia>=0.9",
+    "flask-login>=0.6.3",
+    "flask-principal>=0.4.0",
+    "jwcrypto~=1.5.6",
+    "more-itertools>=10.6.0",
+    "psycopg2>=2.9.10",
+    "psycopg2-binary>=1.0.0",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "requests>=2.32.3",
+    "requests-oauthlib>=2.0.0",
+    "sqlalchemy>=2.0.42",
+    "valkey>=6.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "flask-vite>=0.5.2",
+    "ruff>=0.12.7",
+]
+
+[tool.ruff]
+indent-width = 2
+line-length = 120
+
+[tool.ruff.format]
+indent-style = "space"
+line-ending = "lf"
+quote-style = "single"

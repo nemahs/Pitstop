@@ -19,7 +19,7 @@ function has_permission(user: User, permission: Permissions): boolean {
   return (user.permissions & permission) === permission;
 }
 
-function Header({raw_user, scopes, client_id, redirect_uri}: {raw_user: string, scopes: string, client_id: number, redirect_uri: string}) {
+function Header({raw_user, auth_url}: {raw_user: string, auth_url: string}) {
   let user: User = JSON.parse(raw_user);
 
   let rightSide = user.is_authenticated ? (
@@ -29,7 +29,8 @@ function Header({raw_user, scopes, client_id, redirect_uri}: {raw_user: string, 
     </mantine.Group>
   ) : (
     <mantine.Group justify="flex-end">
-      <LoginAnchor client_id={client_id} scopes={scopes} redirect_uri={redirect_uri}><img height={35} src="/static/eve-sso-login-black-large.png"></img></LoginAnchor>
+      <a href={auth_url}>Test GICE Login</a>
+     {/*<LoginAnchor client_id={client_id} scopes={scopes} redirect_uri={redirect_uri}><img height={35} src="/static/eve-sso-login-black-large.png"></img></LoginAnchor> */}
     </mantine.Group>
   );
 
@@ -43,18 +44,6 @@ function Header({raw_user, scopes, client_id, redirect_uri}: {raw_user: string, 
   );
 }
 
-
-function LoginAnchor({client_id, scopes, redirect_uri, children}: {client_id: number, scopes: string, redirect_uri: string, children: any}) {
- 
-  let sso_url = "https://login.eveonline.com/v2/oauth/authorize?response_type=code";
-  sso_url += `&redirect_uri=${encodeURIComponent(redirect_uri)}`;
-  sso_url += `&client_id=${client_id}`;
-  sso_url += `&scope=${encodeURIComponent(scopes)}&state=banana`;
-
-  return (
-    <a href={sso_url}>{ children }</a>
-  )
-}
 
 interface Notification {
   severity: string;
@@ -95,13 +84,13 @@ function Notifications({messages}: {messages: string})
   );
 }
 
-export function Layout({current_user, client_id, scopes, redirect_uri, name, messages, is_admin, children} : {current_user: string, client_id: number, scopes: string, redirect_uri: string, name: string, messages: string, is_admin: boolean, children: any}) {
+export function Layout({current_user, name, messages, is_admin, auth_url, children} : {current_user: string, name: string, messages: string, is_admin: boolean, auth_url: string, children: any}) {
   return (
     <mantine.MantineProvider defaultColorScheme='dark'>
       <mantine.AppShell header={{height: 40}} navbar={{width: 200, breakpoint: 'md'}}>
 
         <mantine.AppShell.Header>
-          <Header raw_user={current_user} client_id={client_id} scopes={scopes} redirect_uri={redirect_uri} />
+          <Header raw_user={current_user} auth_url={auth_url} />
         </mantine.AppShell.Header>
 
         <mantine.AppShellNavbar>

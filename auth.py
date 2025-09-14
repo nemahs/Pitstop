@@ -1,9 +1,10 @@
-from enum import IntFlag, auto, verify, UNIQUE
+from enum import UNIQUE, IntFlag, auto, verify
 
 import valkey
+from flask_principal import Permission, RoleNeed
 
 from data.typing import AccessToken, RefreshToken
-from flask_principal import Permission, RoleNeed
+
 
 @verify(UNIQUE)
 class Permissions(IntFlag):
@@ -16,10 +17,11 @@ class AuthManager:
     def __init__(self, host: str = "localhost"):
         self.valkey_client = valkey.Valkey(host=host)
 
-    def save_user(self, user_id: int, access_token: AccessToken, refresh_token: RefreshToken, expiry: int, name: str):
+    def save_user(self, user_id: int, access_token: AccessToken, refresh_token: RefreshToken | None, expiry: int, name: str):
         self.valkey_client.sadd("characters", user_id)
         self.valkey_client.set(f"{user_id}:access_token", access_token, ex=expiry)
-        self.valkey_client.set(f"{user_id}:refresh_token", refresh_token)
+        if refresh_token is not None:
+            self.valkey_client.set(f"{user_id}:refresh_token", refresh_token)
         self.valkey_client.set(f"{user_id}:name", name)
 
     def get_user(self, user_id):

@@ -1,37 +1,43 @@
+import datetime
 import json
 import logging
 import sys
 
+from pydantic import ValidationError
+
+from .config import ProgramConfig
+
 sys.path += "."
-import threading
 import platform
-from types import SimpleNamespace
-from typing import cast, Any
-from dotenv import dotenv_values
-from flask import Flask, flash, get_flashed_messages, redirect, request
-from flask_inertia import Inertia, render_inertia
-from flask_principal import Principal, identity_changed, Identity
-from flask_cors import CORS
-from flask_login import LoginManager, current_user, login_required, login_user, logout_user
-from flask_vite import Vite
+import threading
+from string import Template
+from typing import Any, cast
+
 import sqlalchemy as sa
-from werkzeug.middleware.proxy_fix import ProxyFix
+from flask import Flask, flash, get_flashed_messages, redirect, request
+from flask_cors import CORS
+from flask_inertia import Inertia, render_inertia
+from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from flask_principal import Identity, Principal, identity_changed
+from flask_vite import Vite
 from valkey import Valkey
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .auth import AuthManager, User, admin_permissions
-from .contract_endpoints import create_contract_blueprint, pull_contracts, CorpID, BaseID, get_outstanding_contracts
-from .contract_endpoints.fetcher import get_key
-from .ValkeyInformationProvider import ValkeyInformationProvider
+from .contract_endpoints import BaseID, CorpID, create_contract_blueprint, get_outstanding_contracts, pull_contracts
+from .data.data_source import OauthProvider
 from .data.esi import ESI
-from .data.esi.corporation import open_corp_contract
+from .data.esi.auth import ESIAuth
+from .data.gice.GICE import GICE
 from .filters import create_filter_endpoints
-from .data.esi.auth import decode_token
+from .ValkeyInformationProvider import ValkeyInformationProvider
 
 SECRET_KEY = "AFHFCHDSJCAS"
 INERTIA_TEMPLATE = "index.html"
 
 logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler(sys.stdout))
+logger.setLevel(logging.INFO)
 
 # region Flask setup
 
@@ -42,13 +48,12 @@ if platform.system() == "Windows":
 app.config.from_object(__name__)
 
 login_manager = LoginManager(app)
-Vite(app)
 principal = Principal(app)
 inertia = Inertia(app)
 
 
 def register_blueprints(app: Flask, valkey_client: Valkey, esi: ESI):
-    contract_endpoints = create_contract_blueprint(corp_id, valkey_host, esi, engine)
+    contract_endpoints = create_contract_blueprint(corp_id, config.VALKEY_HOST, esi, engine)
     app.register_blueprint(contract_endpoints, url_prefix="/fuel")
 
     filter_endpoints = create_filter_endpoints(valkey_client)
@@ -64,31 +69,49 @@ def register_blueprints(app: Flask, valkey_client: Valkey, esi: ESI):
 
 if app.config["DEBUG"]:
     CORS(app)
+    Vite(app)
     app.config["CORS_HEADERS"] = "Content-Type"
 else:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-config = SimpleNamespace(dotenv_values(".env.development" if app.config["DEBUG"] else ".env"))
+try:
+    logger.error(f"We are in {"debug" if app.config['DEBUG'] else "production"} mode")
+    config = ProgramConfig(_env_file="develop.env" if app.config["DEBUG"] else ".env") # type: ignore
+except ValidationError as e:
+    logger.error(f"Configuration error: {e}")
+    sys.exit(1)
 
-valkey_host = config.VALKEY_HOST if config.VALKEY_HOST else "localhost"
-postgres_host = config.POSTGRES_HOST if config.POSTGRES_HOST else "localhost"
+user_auth = AuthManager(host=config.VALKEY_HOST)
+provider = ValkeyInformationProvider(app, config.VALKEY_HOST)
 
-user_auth = AuthManager(host=valkey_host)
-provider = ValkeyInformationProvider(app, valkey_host)
-esi = ESI(config.CLIENT_ID, config.CLIENT_SECRET)
+if config.AUTH_TYPE == "gice":
+    _gice = GICE(config.CLIENT_ID, config.CLIENT_SECRET, config.REDIRECT_URI)
+    login_provider: OauthProvider = _gice
+    esi = _gice.esi
+else:
+    esi = ESI()
+    login_provider: OauthProvider = ESIAuth(esi,
+        config.CLIENT_ID, config.CLIENT_SECRET, config.REDIRECT_URI, scopes=config.SCOPES)
 
 if "vite" not in sys.argv:
-    corp_id = CorpID(BaseID(int(config.CORP_ID)))
-    engine = sa.create_engine(f"postgresql://postgres:wuagmeister@{postgres_host}")
+    corp_id = CorpID(BaseID(int(config.GROUP_ID)))
+    POSTGRES_URL = Template("postgresql://$user:$password@$host")
+
+    engine = sa.create_engine(POSTGRES_URL.substitute(
+        user=config.POSTGRES_USER,
+        password=config.POSTGRES_PASSWORD,
+        host=config.POSTGRES_HOST
+    ))
+
     contracting_thread = threading.Thread(
         target=pull_contracts,
         name="Puller Thread",
-        args=(esi, corp_id, valkey_host, engine),
+        args=(esi, corp_id, config.VALKEY_HOST, engine),
         daemon=True,
     )
 
-    contracting_thread.start()
-    valkey_client = Valkey(valkey_host, decode_responses=True)
+  #  contracting_thread.start()
+    valkey_client = Valkey(config.VALKEY_HOST, decode_responses=True)
     register_blueprints(app, valkey_client, esi)
 
 
@@ -102,10 +125,10 @@ def get_messages():
 def get_is_admin():
     return admin_permissions.can()
 
+
+
 # Shared data
-inertia.share("client_id", config.CLIENT_ID)
-inertia.share("scopes", config.SCOPES)
-inertia.share("redirect_uri", config.REDIRECT_URI)
+inertia.share("auth_url", login_provider.get_authorization_url)
 inertia.share("current_user", get_current_user)
 inertia.share("messages", get_messages)
 inertia.share("is_admin", get_is_admin)
@@ -124,34 +147,31 @@ def index():
 
 @app.route("/login")
 def login_endpoint():
-    login_code = request.args.get("code")
-    if not login_code:
-        flash("ESI did not return a auth code", "error")
+
+    token = login_provider.login_user(request.args.get("code", ""))
+    logger.info(f"Token received: {token}")
+
+    user_data = login_provider.get_user_info(token.access_token)
+
+    if not login_provider.is_user_in_group(token, int(config.GROUP_ID)):
+        flash(f"{user_data.name} is not in the necessary group", "warning")
+        app.logger.warning(f"Character {user_data.name} attempted to log in")
         return redirect("/")
 
-    response = esi.get_tokens(login_code)
 
-    token_data: dict[str, str] = decode_token(response.access_token)
-    character_id: str = token_data["sub"].split(":")[2]
-
-    corp_id = esi.get_character_corp(int(character_id))
-    if corp_id != int(config.CORP_ID):
-        flash(f"{token_data["name"]} is not in the necessary corp", "warning")
-        app.logger.warning(f"Character {token_data['name']} attempted to log in")
-        return redirect("/")
-
-    assert response.refresh_token
+    expiration_duration = token.expires_at - datetime.datetime.now(datetime.UTC)
 
     user_auth.save_user(
-        int(character_id),
-        response.access_token,
-        response.refresh_token,
-        response.expiry,
-        token_data["name"],
+        user_id=user_data.id,
+        access_token=token.access_token,
+        refresh_token=token.refresh_token,
+        expiry=int(expiration_duration.total_seconds()),
+        name=user_data.name,
     )
 
-    login_user(User(character_id, token_data["name"]))
-    identity_changed.send(app, identity=Identity(int(character_id)))
+    logger.info(f"User {user_data.name} logged in with ID {user_data.id}")
+    login_user(User(user_data.id, user_data.name))
+    identity_changed.send(app, identity=Identity(user_data.id))
     return redirect("/")
 
 
@@ -180,10 +200,9 @@ def contracts():
 def open_contract():
     options: dict[str, Any] = cast(dict[str, Any], request.json)
     print(f"Getting key for {current_user.id}")
-    key = get_key(esi, current_user.id, valkey_client)
 
     if "id" in options:
-        open_corp_contract(options["id"], key)
+        esi.open_corp_contract(options["id"])
 
     return redirect(request.referrer, 303)
 
