@@ -19,6 +19,7 @@ class ProgramConfig(BaseSettings):
 
     GROUP_ID: int
     
+    SCOPES: list[str] = []
 
     VALKEY_HOST: str = "localhost"
     POSTGRES_HOST: str = "localhost"

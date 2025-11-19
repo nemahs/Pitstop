@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Literal, Protocol
+from datetime import datetime
+from typing import Protocol
 
 from pydantic import BaseModel
 from valkey import Valkey

@@ -8,7 +8,6 @@ from valkey import Valkey
 
 from auth import admin_permissions
 from data.esi import ESI
-from data.esi.esi import get_structure_names
 from database import Structure
 
 from .dataclasses import NamedItem
@@ -36,7 +35,7 @@ def create_station_blueprint(esi: ESI, valkey_client: Valkey, sql: sa.Engine) ->
       character_id = UserID(BaseID(character_id))
       access_token = get_key(esi, character_id, valkey_client)
 
-      new_names = get_structure_names(list(missing_station_names), access_token)
+      new_names = esi.get_structure_names(list(missing_station_names), access_token)
       new_names = {BaseID(int(x)): y for x, y in new_names.items()}
       station_names.update(new_names)
 

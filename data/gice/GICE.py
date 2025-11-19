@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Literal, cast
+from typing import Literal, cast
 
 import requests
 from pydantic import BaseModel

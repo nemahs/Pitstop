@@ -12,9 +12,10 @@ from valkey import Valkey, ValkeyError
 
 import database as db
 from contract_endpoints.dataclasses import ContractItems, ItemStatus, NamedItem
-from data.esi import ESIError, esi
+from data.data_source import OauthProvider
+from data.esi import ESI, ESIError
 from data.esi.auth import ESIAuth  # TODO: DEAR GOD FIX
-from data.esi.esi import get_bulk_names, get_structure_names, parseRFC7231Date
+from data.esi.esi import ESIEntity, parseRFC7231Date
 from data.typing import AccessToken, RefreshToken
 
 from .typing import BaseID, ContractID, CorpID, ESIContract, ESIItem, UserID
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARN)
 
 
-def pull_contracts(esi: ESIAuth, corp_id: CorpID, valkey_host: str, sql: sa.Engine):
+def pull_contracts(esi: ESI, auth: OauthProvider, corp_id: CorpID, valkey_host: str, sql: sa.Engine):
   valkey_client = Valkey(host=valkey_host, decode_responses=True)
 
   while True:
@@ -34,12 +35,12 @@ def pull_contracts(esi: ESIAuth, corp_id: CorpID, valkey_host: str, sql: sa.Engi
         logger.info('Using user %d for contracts', user_id)
 
         logger.debug('Getting basic contract data for corp')
-        contracts = get_basic_contract_data(esi, user_id, corp_id, valkey_client)
+        contracts = get_basic_contract_data(esi, auth, user_id, corp_id, valkey_client)
 
         logger.debug('Fetching names')
 
         with so.Session(sql) as session:
-          hydrate_names(esi, contracts, user_id, valkey_client, session)
+          hydrate_names(esi, auth, contracts, user_id, valkey_client, session)
           hydrate_alliances(session, esi)
 
           session.commit()
@@ -93,7 +94,7 @@ def pull_contracts(esi: ESIAuth, corp_id: CorpID, valkey_host: str, sql: sa.Engi
 
           logger.debug('Contracts to fetch items for: %s', str(missing_items))
           for id in missing_items:
-            access_token = get_key(esi, user_id, valkey_client)  # Reget key in case it expired
+            access_token = get_key(auth, user_id, valkey_client)  # Reget key in case it expired
 
             try:
               logger.debug('Getting items for contract %d', id)
@@ -102,7 +103,7 @@ def pull_contracts(esi: ESIAuth, corp_id: CorpID, valkey_host: str, sql: sa.Engi
               logger.error('ESI ERROR ON CONTRACT %d', id)
               continue
 
-            hydrate_items(items, session)
+            hydrate_items(items, esi, session)
 
             if items:
               aggregated = aggregate_items(items)
@@ -164,8 +165,8 @@ def aggregate_items(items: list[ESIItem]) -> list[ContractItems]:
   return output
 
 
-def get_basic_contract_data(esi: ESIAuth, user_id: UserID, corp_id: CorpID, valkey_client: Valkey) -> list[ESIContract]:
-  access_token = get_key(esi, user_id, valkey_client)
+def get_basic_contract_data(esi: ESI, auth: OauthProvider, user_id: UserID, corp_id: CorpID, valkey_client: Valkey) -> list[ESIContract]:
+  access_token = get_key(auth, user_id, valkey_client)
   contracts = esi.get_corp_contracts(corp_id, access_token)
   return contracts
 
@@ -173,10 +174,10 @@ def get_basic_contract_data(esi: ESIAuth, user_id: UserID, corp_id: CorpID, valk
 # region Database Hydration
 
 
-def hydrate_alliances(session: so.Session, esi: ESIAuth):
+def hydrate_alliances(session: so.Session, esi: ESI):
   missing_alliances = session.scalars(
     sa.select(db.ContractEntity.id)
-    .where(db.ContractEntity.alliance == None)
+    .where(db.ContractEntity.alliance == None)  # noqa: E711 DB query does not support 'is' or 'is not'
     .where(db.ContractEntity.type == db.EntityType.CHARACTER)
   )
 
@@ -185,7 +186,7 @@ def hydrate_alliances(session: so.Session, esi: ESIAuth):
   for character_id, alliance in alliance_info.items():
     if character := session.get(db.ContractEntity, character_id):
       if alliance and not session.get(db.Alliance, alliance):
-        name = get_bulk_names([alliance])[alliance]
+        name = esi.get_bulk_names([alliance])[alliance]
         session.add(db.Alliance(id=alliance, name=name.name))
       character.alliance_id = alliance
 
@@ -193,19 +194,21 @@ def hydrate_alliances(session: so.Session, esi: ESIAuth):
 
 
 def hydrate_names(
-  esi: ESIAuth, contracts: Sequence[ESIContract], user_id: UserID, valkey_client: Valkey, session: so.Session
+  esi: ESI, auth: OauthProvider, contracts: Sequence[ESIContract], user_id: UserID, valkey_client: Valkey, session: so.Session
 ):
-  hydrate_entities(contracts, 'issuer_id', session)
-  hydrate_entities(contracts, 'assignee_id', session)
-  hydrate_entities(contracts, 'acceptor_id', session)
+  hydrate_entities(contracts, 'issuer_id', session=session, esi=esi)
+  hydrate_entities(contracts, 'assignee_id', session=session, esi=esi)
+  hydrate_entities(contracts, 'acceptor_id', session=session, esi=esi)
 
-  access_token = get_key(esi, user_id, valkey_client)
-  hydrate_structures(contracts, 'start_location_id', access_token, session)
+  access_token = get_key(auth, user_id, valkey_client)
+  hydrate_structures(contracts, 'start_location_id', access_token, esi=esi, session=session)
 
   session.commit()
 
 
-def hydrate_structures(contracts: Sequence[ESIContract], attr: str, access_token: AccessToken, session: so.Session):
+def hydrate_structures(
+  contracts: Sequence[ESIContract], attr: str, access_token: AccessToken, *, esi: ESI, session: so.Session
+):
   contract_ids = {contract[attr] for contract in contracts}
   result = session.scalars(sa.select(db.Structure.id).filter(db.Structure.id.in_(contract_ids)))
   known_ids = {BaseID(x) for x in result}
@@ -216,7 +219,7 @@ def hydrate_structures(contracts: Sequence[ESIContract], attr: str, access_token
   logger.debug('%d known %s ids, %d unknown %s ids', len(known_ids), attr, len(unknown_ids), attr)
 
   if unknown_ids:
-    new_names = get_structure_names(unknown_ids, access_token)
+    new_names = esi.get_structure_names(unknown_ids, access_token)
     for id, name in new_names.items():
       new_item = db.Structure(id=id, name=name)
       session.add(new_item)
@@ -225,7 +228,7 @@ def hydrate_structures(contracts: Sequence[ESIContract], attr: str, access_token
     session.commit()
 
 
-def hydrate_entities(contracts: Sequence[ESIContract], attr: str, session: so.Session):
+def hydrate_entities(contracts: Sequence[ESIContract], attr: str, *, esi: ESI, session: so.Session):
   contract_ids = {contract[attr] for contract in contracts}
   result = session.scalars(sa.select(db.ContractEntity.id).filter(db.ContractEntity.id.in_(contract_ids)))
   known_ids = {BaseID(x) for x in result}
@@ -236,7 +239,7 @@ def hydrate_entities(contracts: Sequence[ESIContract], attr: str, session: so.Se
   logger.debug('%d known %s ids, %d unknown %s ids', len(known_ids), attr, len(unknown_ids), attr)
 
   if unknown_ids:
-    new_names = get_bulk_names(unknown_ids)
+    new_names = esi.get_bulk_names(unknown_ids)
     for id, name in new_names.items():
       new_item = db.ContractEntity(id=id, name=name.name, type=convert_category(name.category))
       session.add(new_item)
@@ -245,7 +248,7 @@ def hydrate_entities(contracts: Sequence[ESIContract], attr: str, session: so.Se
     session.commit()
 
 
-def hydrate_items(items: Sequence[ESIItem], session: so.Session):
+def hydrate_items(items: Sequence[ESIItem], esi: ESI, session: so.Session):
   type_ids = {BaseID(contract['type_id']) for contract in items}
   result = session.scalars(sa.select(db.ItemType.id).filter(db.ItemType.id.in_(type_ids)))
   known_ids = {BaseID(x) for x in result}
@@ -256,7 +259,7 @@ def hydrate_items(items: Sequence[ESIItem], session: so.Session):
   logger.debug('%d known %s ids, %d unknown %s ids', len(known_ids), 'type_id', len(unknown_ids), 'type_id')
 
   if unknown_ids:
-    new_names = get_bulk_names(unknown_ids)
+    new_names = esi.get_bulk_names(unknown_ids)
     for id, name in new_names.items():
       new_item = db.ItemType(id=id, name=name.name)
       session.add(new_item)
@@ -268,18 +271,18 @@ def hydrate_items(items: Sequence[ESIItem], session: so.Session):
 # endregion
 
 
-def convert_category(category: esi.ESIEntity) -> db.EntityType:
-  if category == esi.ESIEntity.CHARACTER:
+def convert_category(category: ESIEntity) -> db.EntityType:
+  if category == ESIEntity.CHARACTER:
     return db.EntityType.CHARACTER
-  elif category == esi.ESIEntity.CORPORATION:
+  elif category == ESIEntity.CORPORATION:
     return db.EntityType.CORPORATION
-  elif category == esi.ESIEntity.ALLIANCE:
+  elif category == ESIEntity.ALLIANCE:
     return db.EntityType.ALLIANCE
   else:
     return db.EntityType.UNKNOWN
 
 
-def get_key(esi: ESIAuth, user_id: UserID, valkey_client: Valkey) -> AccessToken:
+def get_key(auth: OauthProvider, user_id: UserID, valkey_client: Valkey) -> AccessToken:
   """Get the access token for a user, refreshing it if necessary.
 
   :param esi: ESI object to user for refreshing token if needed
@@ -299,7 +302,7 @@ def get_key(esi: ESIAuth, user_id: UserID, valkey_client: Valkey) -> AccessToken
   refresh_token_data = cast(str, valkey_client.get(f'{user_id}:refresh_token'))
   refresh_token = RefreshToken(refresh_token_data)
 
-  token_data = esi.refresh_tokens(refresh_token)
+  token_data = auth.refresh_tokens(refresh_token)
   valkey_client.set(f'{user_id}:access_token', token_data.access_token, ex=token_data.expiry)
 
   return token_data.access_token

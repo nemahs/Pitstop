@@ -3,7 +3,7 @@ from .utils import ESIError as ESIError
 
 class ESI():
 
-    def __init__(self, base_url: str = "https://esi.evetech.net/latest", base_headers: dict[str, str] | None = None):
+    def __init__(self, base_url: str = "https://esi.evetech.net/latest", *, base_headers: dict[str, str] | None = None):
         self.base_url = base_url
         self.base_headers = base_headers
 
@@ -25,7 +25,11 @@ class ESI():
             raise ESIError(f"ESI request failed with status {response.status_code}: {response.text}")
         return response.json()
 
-    from .character import get_alliances_for_characters, get_character_alliance, get_character_corp
+    from .character import (
+        get_alliances_for_characters,
+        get_character_alliance,
+        get_character_corp,
+    )
     from .corporation import (
         ContractType,
         ESIContract,
