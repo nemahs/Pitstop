@@ -1,21 +1,16 @@
 from typing import NewType
-from typing import NotRequired
+
 from data.esi.corporation import ESIContract, ESIItem
+from data.esi.typing import AllianceID
 
-BaseID = NewType("BaseID", int)
-UserID = NewType("UserID", BaseID)
-CorpID = NewType("CorpID", BaseID)
-ContractID = NewType("ContractID", BaseID)
-StructureID = NewType("StructureID", BaseID)
-TypeID = NewType("TypeID", BaseID)
+UserID = NewType("UserID", int)
 
-
-class EnrichedContract(ESIContract, total=False):
+class EnrichedContract(ESIContract):
     assignee_name: str
     issuer_name: str
     location_name: str
     type_name: str
-    alliance: int | None
+    alliance: AllianceID | None
 
-class EnrichedItem(ESIItem, total=False):
-    name: NotRequired[str]
+class EnrichedItem(ESIItem):
+    name: str

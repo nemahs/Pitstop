@@ -2,10 +2,12 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Self, cast
+from typing import Any, Generic, Self, TypeVar, cast
+
+import database as db
+from data.esi.typing import CharacterID, ContractID, CorporationID, EntityID, StructureID, TypeID
 
 from .typing import *
-import database as db
 
 
 class ContractStatus(str, Enum):
@@ -29,22 +31,23 @@ class ContractType(str, Enum):
     LOAN = "loan"
     UNKNOWN = "unknown"
 
+NamableIDs = TypeVar("NamableIDs", EntityID, CorporationID, AllianceID, TypeID, StructureID, CharacterID)
 
 @dataclass
-class NamedItem:
+class NamedItem(Generic[NamableIDs]):
     name: str
-    id: BaseID
+    id: NamableIDs
 
     @classmethod
-    def from_database(cls, item: db.NamedMixin):
+    def from_database(cls, item: db.NamedMixin[NamableIDs]):
         return cls(
             name=item.name,
-            id=BaseID(item.id)
+            id=item.id
         )
 
 @dataclass
 class ByLocation:
-    structure: NamedItem
+    structure: NamedItem[StructureID]
     contract_count: int = 0
     items: list[Any] = field(default_factory=list)
 
@@ -55,7 +58,7 @@ class ItemStatus(str, Enum):
 
 @dataclass
 class ContractItems:
-    item_type: NamedItem
+    item_type: NamedItem[TypeID]
     quantity: int
     status: ItemStatus
 
@@ -70,11 +73,11 @@ class ContractItems:
 @dataclass
 class Contract:
     id: ContractID
-    creator: NamedItem
-    assignee: NamedItem
-    alliance: NamedItem | None
+    creator: NamedItem[EntityID]
+    assignee: NamedItem[EntityID]
+    alliance: NamedItem[AllianceID] | None
     description: str
-    location: NamedItem
+    location: NamedItem[StructureID]
     date_issued: datetime | None
     date_expired: datetime | None = None
     status: ContractStatus = ContractStatus.UNKNOWN
@@ -91,7 +94,7 @@ class Contract:
     @classmethod
     def from_database(cls, contract: db.Contract):
         return cls(
-            id=ContractID(BaseID(contract.contract_id)),
+            id=ContractID(contract.contract_id),
             creator=NamedItem.from_database(contract.contractor),
             alliance=NamedItem.from_database(contract.contractor.alliance) if contract.contractor.alliance else None,
             status=cast(ContractStatus, contract.status),

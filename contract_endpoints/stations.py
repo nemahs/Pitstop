@@ -1,19 +1,19 @@
-from typing import Any, cast
 from logging import Logger
+from typing import Any, cast
 
+import sqlalchemy as sa
+import sqlalchemy.orm as so
 from flask import Blueprint, redirect, request
 from valkey import Valkey
 
-from database import Structure
-import sqlalchemy as sa
-import sqlalchemy.orm as so
-
-from .dataclasses import NamedItem, UserID, BaseID
-from .fetcher import get_key
+from auth import admin_permissions
 from data.esi import ESI
 from data.esi.esi import get_structure_names
-from auth import admin_permissions
+from data.esi.typing import StructureID
+from database import Structure
 
+from .dataclasses import NamedItem, UserID
+from .fetcher import get_key
 
 logger = Logger(__name__)
 STATION_KEY: str = "stations"
@@ -29,17 +29,17 @@ def create_station_blueprint(esi: ESI, valkey_client: Valkey, sql: sa.Engine) ->
         with so.Session(sql) as session:
             station_names = session.execute(sa.select(Structure.id, Structure.name).where(Structure.id.in_(stations))).all()
             missing_station_names = stations - {x for x,_ in station_names}
-            station_names = { BaseID(int(x)): val for x,val in station_names }
+            station_names = { StructureID(int(x)): val for x,val in station_names }
 
             character_id: int = cast(int, valkey_client.srandmember("characters"))
-            character_id = UserID(BaseID(character_id))
+            character_id = UserID(character_id)
             access_token = get_key(esi, character_id, valkey_client)
 
             new_names = get_structure_names(list(missing_station_names), access_token)
-            new_names = {BaseID(int(x)): y for x,y in new_names.items()}
+            new_names = {StructureID(x): y for x,y in new_names.items()}
             station_names.update(new_names)
 
-        return [NamedItem(name, key) for key, name in station_names.items()]
+        return [NamedItem[StructureID](name, key) for key, name in station_names.items()]
 
     @admin_permissions.require()
     @station_endpoints.post("/<int:station_id>")

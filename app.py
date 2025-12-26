@@ -3,29 +3,43 @@ import logging
 import sys
 
 sys.path += "."
-import threading
+import os
 import platform
-from types import SimpleNamespace
-from typing import cast, Any
-from dotenv import dotenv_values
-from flask import Flask, flash, get_flashed_messages, redirect, request
-from flask_inertia import Inertia, render_inertia
-from flask_principal import Principal, identity_changed, Identity
-from flask_cors import CORS
-from flask_login import LoginManager, current_user, login_required, login_user, logout_user
-from flask_vite import Vite
+import threading
+from typing import Any, cast
+
 import sqlalchemy as sa
-from werkzeug.middleware.proxy_fix import ProxyFix
+from flask import Flask, flash, get_flashed_messages, redirect, request
+from flask_cors import CORS
+from flask_inertia import Inertia, render_inertia
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from flask_principal import Identity, Principal, identity_changed
+from flask_vite import Vite
 from valkey import Valkey
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+from contract_endpoints.blueprint import ValkeyFilter
+from data.esi.typing import CharacterID, make_character_id
 
 from .auth import AuthManager, User, admin_permissions
-from .contract_endpoints import create_contract_blueprint, pull_contracts, CorpID, BaseID, get_outstanding_contracts
+from .config import ConfigFile
+from .contract_endpoints import (
+    create_contract_blueprint,
+    get_outstanding_contracts,
+    pull_contracts,
+)
 from .contract_endpoints.fetcher import get_key
-from .ValkeyInformationProvider import ValkeyInformationProvider
 from .data.esi import ESI
+from .data.esi.auth import decode_token
 from .data.esi.corporation import open_corp_contract
 from .filters import create_filter_endpoints
-from .data.esi.auth import decode_token
+from .ValkeyInformationProvider import ValkeyInformationProvider
 
 SECRET_KEY = "AFHFCHDSJCAS"
 INERTIA_TEMPLATE = "index.html"
@@ -68,18 +82,23 @@ if app.config["DEBUG"]:
 else:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-config = SimpleNamespace(dotenv_values(".env.development" if app.config["DEBUG"] else ".env"))
 
-valkey_host = config.VALKEY_HOST if config.VALKEY_HOST else "localhost"
-postgres_host = config.POSTGRES_HOST if config.POSTGRES_HOST else "localhost"
 
-user_auth = AuthManager(host=valkey_host)
-provider = ValkeyInformationProvider(app, valkey_host)
-esi = ESI(config.CLIENT_ID, config.CLIENT_SECRET)
 
-if "vite" not in sys.argv:
-    corp_id = CorpID(BaseID(int(config.CORP_ID)))
-    engine = sa.create_engine(f"postgresql://postgres:wuagmeister@{postgres_host}")
+def setup_app():
+    global user_auth, provider, config, esi, corp_id, engine, valkey_client, valkey_host
+
+    config = ConfigFile(_env_file="develop.env" if app.config["DEBUG"] else ".env") # pyright: ignore[reportCallIssue]
+
+    valkey_host = config.VALKEY_HOST
+    postgres_host = config.POSTGRES_HOST
+
+    user_auth = AuthManager(host=valkey_host)
+    provider = ValkeyInformationProvider(app, valkey_host)
+    esi = ESI(config.CLIENT_ID, config.CLIENT_SECRET)
+
+    corp_id = config.CORP_ID
+    engine = sa.create_engine(f"postgresql+psycopg://postgres:{config.POSTGRES_PASSWORD}@{postgres_host}")
     contracting_thread = threading.Thread(
         target=pull_contracts,
         name="Puller Thread",
@@ -88,29 +107,37 @@ if "vite" not in sys.argv:
     )
 
     contracting_thread.start()
+
     valkey_client = Valkey(valkey_host, decode_responses=True)
     register_blueprints(app, valkey_client, esi)
 
+    #region Inertia helpers
+    def get_current_user():
+        return json.dumps(current_user.__dict__)
 
-#region Inertia helpers
-def get_current_user():
-    return json.dumps(current_user.__dict__)
+    def get_messages():
+        return json.dumps(get_flashed_messages(with_categories=True))
 
-def get_messages():
-    return json.dumps(get_flashed_messages(with_categories=True))
+    def get_is_admin():
+        return admin_permissions.can()
 
-def get_is_admin():
-    return admin_permissions.can()
+    #endregion
 
-# Shared data
-inertia.share("client_id", config.CLIENT_ID)
-inertia.share("scopes", config.SCOPES)
-inertia.share("redirect_uri", config.REDIRECT_URI)
-inertia.share("current_user", get_current_user)
-inertia.share("messages", get_messages)
-inertia.share("is_admin", get_is_admin)
 
-#endregion
+    # Shared data
+    inertia.share("client_id", config.CLIENT_ID)
+    inertia.share("scopes", config.SCOPES)
+    inertia.share("redirect_uri", config.REDIRECT_URI)
+    inertia.share("current_user", get_current_user)
+    inertia.share("messages", get_messages)
+    inertia.share("is_admin", get_is_admin)
+
+
+
+if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    setup_app()
+
+
 
 #region Routes 
 
@@ -132,9 +159,9 @@ def login_endpoint():
     response = esi.get_tokens(login_code)
 
     token_data: dict[str, str] = decode_token(response.access_token)
-    character_id: str = token_data["sub"].split(":")[2]
+    character_id: CharacterID = make_character_id(int(token_data["sub"].split(":")[2]))
 
-    corp_id = esi.get_character_corp(int(character_id))
+    corp_id = esi.get_character_corp(make_character_id(character_id))
     if corp_id != int(config.CORP_ID):
         flash(f"{token_data["name"]} is not in the necessary corp", "warning")
         app.logger.warning(f"Character {token_data['name']} attempted to log in")
@@ -143,7 +170,7 @@ def login_endpoint():
     assert response.refresh_token
 
     user_auth.save_user(
-        int(character_id),
+        character_id,
         response.access_token,
         response.refresh_token,
         response.expiry,
@@ -200,15 +227,9 @@ def admin():
     props = {}
     filters : set[bytes] = cast(set[bytes], valkey_client.smembers("filters"))
 
-    if filters:
-        props.update({
-            "filters": [json.loads(x) for x in filters]
-        })
-    else:
-        props.update({
-            "filters": []
-        })
-
+    props.update({
+        "filters": [ValkeyFilter.model_validate_json(x) for x in filters] if filters else []
+    })
 
     return render_inertia("Admin", props=props)
 

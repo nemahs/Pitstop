@@ -1,0 +1,43 @@
+[project]
+name = "contracting"
+version = "0.3.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.16.0",
+    "flask>=3.1.0",
+    "flask-cors>=5.0.0",
+    "flask-inertia>=0.9",
+    "flask-login>=0.6.3",
+    "flask-principal>=0.4.0",
+    "flask-vite>=0.5.2",
+    "jwcrypto~=1.5.6",
+    "more-itertools>=10.6.0",
+    "psycopg[binary]>=3.3.2",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.12.0",
+    "python-dotenv~=1.0.1",
+    "requests>=2.32.3",
+    "valkey>=6.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.148.7",
+    "pylance>=0.39.0",
+    "pytest>=9.0.2",
+    "ruff>=0.14.8",
+]
+
+[tool.ruff]
+indent-width = 2
+line-length = 120
+
+[tool.ruff.lint.pycodestyle]
+ignore-overlong-task-comments = true
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "."
+]

@@ -1,6 +1,9 @@
-import valkey
 import logging
-from flask import Blueprint, request, redirect
+
+import valkey
+from flask import Blueprint, redirect, request
+
+from contract_endpoints.blueprint import ValkeyFilter
 
 VALKEY_KEY = "filters"
 logger = logging.getLogger(__name__)
@@ -11,7 +14,8 @@ def create_filter_endpoints(valkey_client: valkey.Valkey) -> Blueprint:
 
     @filters_endpoints.post("/")
     def add_filter():
-        valkey_client.sadd(VALKEY_KEY, request.data)
+        filter = ValkeyFilter.model_validate_json(request.data)
+        valkey_client.sadd(VALKEY_KEY, filter.model_dump_json())
         return redirect(request.referrer, code=303)
 
 

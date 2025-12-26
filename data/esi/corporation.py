@@ -1,113 +1,132 @@
 import logging
+from datetime import datetime
 from enum import Enum
-from typing import Any, Required, TypedDict
+from typing import Annotated
 
 import requests
+from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat, PositiveInt, TypeAdapter
 
 from ..typing import AccessToken
-from .utils import ESIError, ESI_BASE_URL, auth_headers
+from .typing import ContractID, CorporationID, EntityID, StructureID, TypeID
+from .utils import ESI_BASE_URL, ESIError, auth_headers
 
 logger = logging.getLogger(__name__)
 
 
 class ContractStatus(str, Enum):
-    OUTSTANDING = "outstanding"
-    IN_PROGRESS = "in_progress"
-    FINISHED_ISSUER = "finished_issuer"
-    FINISHED_CONTRACTOR = "finished_contractor"
-    FINISHED = "finished"
-    CANCELLED = "cancelled"
-    REJECTED = "rejected"
-    FAILED = "failed"
-    DELETED = "deleted"
-    REVERSED = "reversed"
+  OUTSTANDING = "outstanding"
+  IN_PROGRESS = "in_progress"
+  FINISHED_ISSUER = "finished_issuer"
+  FINISHED_CONTRACTOR = "finished_contractor"
+  FINISHED = "finished"
+  CANCELLED = "cancelled"
+  REJECTED = "rejected"
+  FAILED = "failed"
+  DELETED = "deleted"
+  REVERSED = "reversed"
+
 
 class ContractType(str, Enum):
-    UNKNOWN = "unknown"
-    ITEM_EXCHANGE = "item_exchange"
-    AUCTION = "auction"
-    COURIER = "courier"
-    LOAN = "loan"
+  UNKNOWN = "unknown"
+  ITEM_EXCHANGE = "item_exchange"
+  AUCTION = "auction"
+  COURIER = "courier"
+  LOAN = "loan"
 
-class ESIContract(TypedDict, total=False):
-    acceptor_id: Required[int]
-    assignee_id: Required[int]
-    contract_id: Required[int]
-    issuer_id: Required[int]
 
-    date_accepted: str
-    date_completed: str
-    date_expired: Required[str]
-    date_issued: Required[str]
+class ContractAvailability(str, Enum):
+  PUBLIC = "public"
+  CORPORATION = "corporation"
+  ALLIANCE = "alliance"
+  PERSONAL = "personal"
 
-    for_corporation: Required[bool]
 
-    start_location_id: int
-    end_location_id: int
+class ESIContract(BaseModel):
+  acceptor_id: EntityID
+  assignee_id: EntityID
+  availability: ContractAvailability
+  buyout: NonNegativeFloat | None = None
+  collateral: NonNegativeFloat | None = None
+  contract_id: ContractID
+  date_accepted: datetime | None = None
+  date_completed: datetime | None = None
+  date_expired: datetime
+  date_issued: datetime
+  days_to_complete: int | None = None
+  end_location_id: StructureID | None = None
+  for_corporation: bool
+  issuer_corporation_id: CorporationID
+  issuer_id: EntityID
+  price: NonNegativeFloat | None = None
+  reward: NonNegativeFloat | None = None
+  start_location_id: StructureID | None = None
+  status: ContractStatus
+  title: str | None = None
+  type: ContractType
+  volume: NonNegativeFloat | None = None
 
-    status: Required[ContractStatus]
-    type: Required[ContractType]
 
-    title: str
+class ESIItem(BaseModel):
+  is_included: bool
+  is_singleton: bool
+  quantity: PositiveInt
+  raw_quantity: int | None = None
+  record_id: int
+  type_id: TypeID
 
-    price: float
-    reward: float
 
-class ESIItem(TypedDict, total=False):
-    is_included: Required[bool]
-    is_singleton: Required[bool]
-    quantity: Required[int]
-    record_id: Required[int]
-    type_id: Required[int]
+def get_corp_contracts(_, corp_id: CorporationID, access_token: AccessToken) -> list[ESIContract]:
+  ContractList = TypeAdapter(list[ESIContract])
+  response = requests.get(
+    f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/",
+    headers=auth_headers(access_token),
+  )
 
-def get_corp_contracts(_, corp_id: int, access_token: AccessToken) -> list[ESIContract]:
-    response = requests.get(
-        f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/",
+  if response.status_code != requests.codes.ok:
+    logger.error(f"Error occurred while fetching contracts, response code {response.status_code}, text {response.text}")
+    return []
+
+  contracts: list[ESIContract] = ContractList.validate_json(response.text)
+
+  remaining_pages = response.headers.get("x-pages")
+  logger.info("%d pages of contracts to fetch", remaining_pages)
+
+  if remaining_pages:
+    for page in range(2, int(remaining_pages) + 1):
+      response = requests.get(
+        f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/?page={page}",
         headers=auth_headers(access_token),
-    )
+      )
 
-    if response.status_code != requests.codes.ok:
-        return []
+      if response.status_code != requests.codes.ok:
+        continue  # TODO: Retry
 
-    contracts: list[Any] = response.json()
-
-    remaining_pages = response.headers.get("x-pages")
-    logger.info(f"{remaining_pages} pages of contracts to fetch")
-
-    if remaining_pages:
-        for page in range(2, int(remaining_pages) + 1):
-            response = requests.get(
-                f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/?page={page}",
-                headers=auth_headers(access_token),
-            )
-
-            if response.status_code != requests.codes.ok:
-                continue  # TODO: Retry
-
-            contracts.extend(response.json())
-
-    print(f"Fetched {len(contracts)} contracts")
-    return contracts
+      contracts.extend(ContractList.validate_python(response.json()))
 
 
-def get_corp_contract_items(_, corp_id: int, contract_id: int, access_token: AccessToken) -> list[ESIItem]:
-    response = requests.get(
-        f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/{contract_id}/items/",
-        headers=auth_headers(access_token),
-    )
-
-    if response.status_code != 200:
-        logger.error(f"Error occurred while fetching items for {contract_id}, response code {response.status_code}")
-        raise ESIError(response.status_code, "Failed to get items for contract")
-
-    logger.info(f"Fetched items for contract {contract_id}")
-    return response.json()
+  logger.info("Fetched %d contracts", len(contracts))
+  return contracts
 
 
-def open_corp_contract(contract_id: int, access_token: AccessToken):
-    response = requests.post(f"{ESI_BASE_URL}/ui/openwindow/contract?contract_id={contract_id}",
-                             headers=auth_headers(access_token))
-    
+def get_corp_contract_items(_, corp_id: CorporationID, contract_id: ContractID, access_token: AccessToken) -> list[ESIItem]:
+  ItemList = TypeAdapter(list[ESIItem])
+  response = requests.get(
+    f"{ESI_BASE_URL}/corporations/{corp_id}/contracts/{contract_id}/items/",
+    headers=auth_headers(access_token),
+  )
 
-    if response.status_code != requests.status_codes.codes.OK:
-        logger.error(f"Error occurred trying to open contract window, code: {response.status_code}, text: {response.text}")
+  if response.status_code != requests.codes.ok:
+    logger.error(f"Error occurred while fetching items for {contract_id}, response code {response.status_code}")
+    raise ESIError("Failed to get items for contract", error_code=response.status_code, headers=response.headers)
+
+  logger.info(f"Fetched items for contract {contract_id}")
+  return ItemList.validate_json(response.text)
+
+
+def open_corp_contract(contract_id: CorporationID, access_token: AccessToken):
+  response = requests.post(
+    f"{ESI_BASE_URL}/ui/openwindow/contract?contract_id={contract_id}", headers=auth_headers(access_token)
+  )
+
+  if response.status_code != requests.status_codes.codes.OK:
+    logger.error(f"Error occurred trying to open contract window, code: {response.status_code}, text: {response.text}")

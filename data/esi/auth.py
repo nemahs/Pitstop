@@ -50,8 +50,12 @@ def refresh_tokens(self, refresh_token: RefreshToken) -> OauthTokens:
             "refresh_token": refresh_token,
         },
         auth=self.client_auth,
-    ).json()
+    )
 
+    if response.status_code != requests.codes.ok:
+        raise ESIError(f"Failed to refresh tokens, got {response.status_code}: {response.text}")
+
+    response = response.json()
     if "access_token" not in response or "expires_in" not in response:
         raise ESIError(f"Missing item in token response, got {response}")
     return OauthTokens(response["access_token"], None, response["expires_in"])
