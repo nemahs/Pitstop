@@ -32,6 +32,7 @@ def get_outstanding_contracts(corp_id: CorporationID, sql: sa.Engine) -> list[Co
         sa.select(db.Contract)
         .where(db.Contract.status == db.ContractStatus.OUTSTANDING)
         .where(sa.or_(db.Contract.contracted_to == corp_id, db.Contract.contractor_id == corp_id))
+        .where(db.Contract.expires_on > datetime.now())
       )
     )
 
