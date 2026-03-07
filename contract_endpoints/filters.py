@@ -18,6 +18,7 @@ class FilterFunctions(str, Enum):
   STRONT_HIGH = "strontHigh"
   VALID_ALLIANCE = "allianceCheck"
   VALID_STATION = "validStation"
+  IS_RORQ = "rorqCheck"
 
 
 def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
@@ -35,6 +36,9 @@ def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
 
   def isInfoPopulated(contract: Contract, _: Any | None) -> bool:
     return contract.description is not None and len(contract.description.strip()) > 0
+
+  def isRorqContract(contract: Contract, _: Any | None) -> bool:
+    return "rorq" in contract.description.lower()
 
   def isFuelRounded(contract: Contract, roundingValue: int | None) -> bool:
     if not roundingValue:
@@ -54,7 +58,7 @@ def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
     if not max:
       return True
 
-    total_stront: int = sum([item.quantity for item in contract.items if item.item_type.id == STRONT_ID])
+    total_stront: int = sum(item.quantity for item in contract.items if item.item_type.id == STRONT_ID)
 
     return total_stront < max
 
@@ -66,9 +70,8 @@ def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
 
   def inValidStation(contract: Contract, _: Any | None) -> bool:
     fuelling_stations: set[str] = cast(set[str], valkey_client.smembers(STATION_KEY))
-    valid_stations: list[int] = [int(x) for x in fuelling_stations]
 
-    return not fuelling_stations or contract.location.id in valid_stations
+    return not fuelling_stations or contract.location.id in map(int, fuelling_stations)
 
   return {
     FilterFunctions.INFO_POPULATED: isInfoPopulated,
@@ -77,4 +80,5 @@ def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
     FilterFunctions.STRONT_HIGH: isStrontHigh,
     FilterFunctions.VALID_ALLIANCE: inAllowedAlliances,
     FilterFunctions.VALID_STATION: inValidStation,
+    FilterFunctions.IS_RORQ: isRorqContract,
   }

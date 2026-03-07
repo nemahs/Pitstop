@@ -3,20 +3,22 @@ FROM python AS builder
 
 
 RUN apt update && apt install -y nodejs npm 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
-COPY . /app/
+COPY . .
 ENV FLASK_DEBUG=0
-RUN --mount=type=secret,id=.env,dst=/app/.env pip install --no-cache-dir -r /app/requirements.txt && flask vite install
-RUN --mount=type=secret,id=.env,dst=/app/.env flask vite build
+RUN uv sync --no-cache-dir && uv run flask vite install
+RUN uv run flask vite build
 
 
 FROM python:slim as production
-
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 EXPOSE 80/tcp
 
 COPY --exclude=**/vite . /app
-RUN pip install --no-cache-dir -r /app/requirements.txt
+WORKDIR /app
+RUN uv sync --no-cache-dir
 COPY --from=builder /app/vite/dist /app/vite/dist
 
 WORKDIR /app
-CMD [ "flask", "run", "--port", "80", "--host", "0.0.0.0"]
+CMD [ "uv", "run", "flask", "run", "--port", "80", "--host", "0.0.0.0"]

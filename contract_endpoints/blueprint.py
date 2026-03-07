@@ -100,7 +100,7 @@ def create_contract_blueprint(corp_id: CorporationID, valkey_host: str, esi: ESI
       return []
 
     with so.Session(sql) as session:
-      output = session.scalars(sa.select(db.Structure.id, db.Structure.name).where(db.Structure.id.in_(fuelling_areas)))
+      output = session.execute(sa.select(db.Structure.id, db.Structure.name).where(db.Structure.id.in_(map(int, fuelling_areas))))
       output = {id: ByLocation(structure=NamedItem(id=id, name=name)) for id, name in output}
 
     for location, contracts in itertools.groupby(sorted(contracts, key=location_key), key=location_key):
@@ -127,7 +127,7 @@ def create_contract_blueprint(corp_id: CorporationID, valkey_host: str, esi: ESI
       output_location.items = item_counts
 
     assert None not in output.values()
-    return [x for x in output.values()]
+    return list(output.values())
 
   @contract_endpoints.route("/all")
   def all_fuel_contracts() -> list[Contract]:

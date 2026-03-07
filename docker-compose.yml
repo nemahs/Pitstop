@@ -4,9 +4,17 @@ services:
     image: registry.nemahs.org/pitstop:latest
     secrets:
       - source: app.config
-        target: /app/.env
+        target: /app/prod.env
+      
+    environment:
+      - ENVIRONMENT=prod
 
     deploy:
+      
+      resources:
+        limits:
+          cpus: "2"
+          memory: "256M"
       labels:
         traefik.enable: "true"
         traefik.http.services.pitstop.loadbalancer.server.port: 80
@@ -63,7 +71,7 @@ services:
       - pitstop
 
   postgres:
-    image: postgres:alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_PASSWORD: wuagmeister
     volumes:
@@ -75,7 +83,7 @@ services:
 
   migrate:
     image: registry.nemahs.org/pitstop:latest
-    entrypoint: ["alembic", "upgrade", "head"]
+    entrypoint: ["uv", "run", "alembic", "upgrade", "head"]
     depends_on: 
       - postgres
 
@@ -93,7 +101,7 @@ volumes:
 
 secrets:
   app.config:
-    file: ./.env
+    file: ./prod.env
 
 networks:
   pitstop:

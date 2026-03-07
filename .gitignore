@@ -2,5 +2,5 @@
 .env.development
 __pycache__
 .venv
-.env.prod
+prod.env
 develop.env

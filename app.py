@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+from warnings import filterwarnings
 
 sys.path += "."
 import os
@@ -87,8 +88,9 @@ else:
 
 def setup_app():
     global user_auth, provider, config, esi, corp_id, engine, valkey_client, valkey_host
+    env_file = "develop.env" if app.config["DEBUG"] else "prod.env"
 
-    config = ConfigFile(_env_file="develop.env" if app.config["DEBUG"] else ".env") # pyright: ignore[reportCallIssue]
+    config = ConfigFile(_env_file=env_file, _env_file_encoding='utf-8') # pyright: ignore[reportCallIssue]
 
     valkey_host = config.VALKEY_HOST
     postgres_host = config.POSTGRES_HOST
@@ -134,7 +136,8 @@ def setup_app():
 
 
 
-if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or os.environ.get("ENVIRONMENT") == "prod":    
+    logger.info("Started as main, setting up app")
     setup_app()
 
 
@@ -206,7 +209,6 @@ def contracts():
 @login_required
 def open_contract():
     options: dict[str, Any] = cast(dict[str, Any], request.json)
-    print(f"Getting key for {current_user.id}")
     key = get_key(esi, current_user.id, valkey_client)
 
     if "id" in options:
@@ -224,12 +226,12 @@ def fuelling():
 @login_required
 @admin_permissions.require(http_exception=403)
 def admin():
-    props = {}
-    filters : set[bytes] = cast(set[bytes], valkey_client.smembers("filters"))
+    raw_filters : set[bytes] = cast(set[bytes], valkey_client.smembers("filters"))
+    filters = map(ValkeyFilter.model_validate_json, raw_filters)
 
-    props.update({
-        "filters": [ValkeyFilter.model_validate_json(x) for x in filters] if filters else []
-    })
+    props = {
+        "filters": list(map(ValkeyFilter.model_dump, filters))
+    }
 
     return render_inertia("Admin", props=props)
 

@@ -1,5 +1,5 @@
 target "frontend" {
   secret = [
-    "id=.env,src=.env"
+    "id=.env,src=prod.env"
   ]
 }

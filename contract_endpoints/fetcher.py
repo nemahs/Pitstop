@@ -14,7 +14,7 @@ from valkey import Valkey, ValkeyError
 
 import database as db
 from contract_endpoints.dataclasses import ContractItems, ItemStatus, NamedItem
-from contracting.data.esi import ESI, ESIError, esi
+from data.esi import ESI, ESIError, esi
 from data.esi.esi import get_bulk_names, get_structure_names
 from data.esi.typing import ContractID, CorporationID, EntityID, TypeID, make_character_id
 from data.typing import AccessToken, RefreshToken
@@ -210,8 +210,6 @@ def hydrate_alliances(session: so.Session, esi: ESI):
       (db.ContractEntity.updated_at == None) |
        (datetime.now() - db.ContractEntity.updated_at > ALLIANCE_EXPIRATION)
     )
-
-  print(str(get_alliances_to_update))  
 
   missing_alliances = session.scalars(get_alliances_to_update)
 
