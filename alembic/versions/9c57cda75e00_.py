@@ -5,11 +5,13 @@ Revises:
 Create Date: 2025-05-24 11:18:59.790565
 
 """
-from typing import Sequence, Union
 from enum import Enum, auto
+from typing import Sequence, Union
+
+import sqlalchemy as sa
 
 from alembic import op
-import sqlalchemy as sa
+
 
 class ContractStatus(str, Enum):
     OUTSTANDING = "outstanding"
@@ -77,10 +79,10 @@ def upgrade() -> None:
     )
 
     op.create_table("items",
-        sa.Column("type_id", sa.Integer, sa.ForeignKey("item_types.id"), primary_key=True),
-        sa.Column("contract_id", sa.Integer, sa.ForeignKey("contracts.contract_id"), primary_key=True),
+        sa.Column("type_id", sa.BigInteger, sa.ForeignKey("item_types.id"), primary_key=True),
+        sa.Column("contract_id", sa.BigInteger, sa.ForeignKey("contracts.contract_id"), primary_key=True),
         sa.Column("requested", sa.Boolean, primary_key=True),
-        sa.Column("quantity", sa.Integer, nullable=False),
+        sa.Column("quantity", sa.BigInteger, nullable=False),
     )
 
 def downgrade() -> None:

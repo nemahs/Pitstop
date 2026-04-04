@@ -13,6 +13,7 @@ export interface SavedFilter {
 export default FilterManagement;
 const ERROR_TEXT = "⛔ Error";
 const WARNING_TEXT = "⚠️ Warning";
+const INFO_TEXT = "Info";
 
 function FilterDisplay({filter}: {filter: SavedFilter})
 {
@@ -85,7 +86,8 @@ function AddFilterForm() {
                     onChange={set_filter_type}
                     data={[
                         { label: WARNING_TEXT, value: "Warning" },
-                        { label: ERROR_TEXT, value: "Error" }]}
+                        { label: ERROR_TEXT, value: "Error" },
+                        { label: INFO_TEXT, value: "Info"}]}
                 />
             </Input.Wrapper>
             <Group>

@@ -91,6 +91,9 @@ def get_structure_names(ids: Sequence[int], access_token: AccessToken) -> dict[i
       case requests.codes.too_many:
         logger.warning("Rate limited, waiting before continuing")
         time.sleep(int(response.headers.get("Retry-After", 1)))
+      case requests.codes.forbidden:
+        logger.warning("Forbidden structure, setting name to unkown")
+        output[id] = "Unknown structure"
       case _:
         logger.error(
           f"Error occurred while fetching structure {id}, response code {response.status_code}, text {response.text}"

@@ -19,4 +19,6 @@ class ConfigFile(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PASSWORD: str
 
+    ADMINS: list[int] = list()
+
     SCOPES: str # TODO: Validate against valid ESI scopes

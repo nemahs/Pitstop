@@ -1,6 +1,7 @@
 import itertools
 import logging
 import time
+import traceback
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timedelta
 from typing import Final, cast
@@ -113,7 +114,7 @@ def pull_contracts(esi: ESI, corp_id: CorporationID, valkey_host: str, sql: sa.E
               items = esi.get_corp_contract_items(corp_id, id, access_token)
             except ESIError as err:
               match err.error_code:
-                case requests.codes.too_many_requests:
+                case requests.codes.too_many:
                   retry_after = int(err.headers.get("Retry-After", "10") if err.headers else 10) * RATE_LIMIT_MULTIPLIER
                   logger.warning("Rate limited, waiting %d seconds till we can continue", retry_after)
                   time.sleep(retry_after)
@@ -160,12 +161,10 @@ def pull_contracts(esi: ESI, corp_id: CorporationID, valkey_host: str, sql: sa.E
     except (DatabaseError, ValkeyError) as err:
       logger.error("%s during contract pull: %s", type(err).__name__, err)
       time.sleep(30)
-    except ESIError as err:
-      logger.error("WE ARE NOT SUPPOSED TO EVER GET HERE")
-      raise err
-    except Exception as err:
-      logger.error("Ran into an unknown error, waiting, then trying again. Error: %s", err)
-      time.sleep(30)
+    # except err:
+    #   logger.error("Ran into an unknown error, waiting, then trying again. Error: %s", err)
+    #   traceback.print_exception(err)
+    #   time.sleep(30)
 
 
 def aggregate_items(items: list[ESIItem]) -> list[ContractItems]:

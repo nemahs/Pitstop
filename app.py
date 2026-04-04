@@ -113,6 +113,9 @@ def setup_app():
     valkey_client = Valkey(valkey_host, decode_responses=True)
     register_blueprints(app, valkey_client, esi)
 
+    if config.ADMINS:
+        pass
+
     #region Inertia helpers
     def get_current_user():
         return json.dumps(current_user.__dict__)

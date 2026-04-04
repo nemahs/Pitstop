@@ -88,9 +88,6 @@ class Contract:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
-    def to_json(self):
-        return json.dumps(self.__dict__)
-
     @classmethod
     def from_database(cls, contract: db.Contract):
         return cls(

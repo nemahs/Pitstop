@@ -18,7 +18,7 @@ class FilterFunctions(str, Enum):
   STRONT_HIGH = "strontHigh"
   VALID_ALLIANCE = "allianceCheck"
   VALID_STATION = "validStation"
-  IS_RORQ = "rorqCheck"
+  IS_BEEHIVE = "beehive"
 
 
 def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
@@ -37,8 +37,8 @@ def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
   def isInfoPopulated(contract: Contract, _: Any | None) -> bool:
     return contract.description is not None and len(contract.description.strip()) > 0
 
-  def isRorqContract(contract: Contract, _: Any | None) -> bool:
-    return "rorq" in contract.description.lower()
+  def isBeehive(contract: Contract, _: Any | None) -> bool:
+    return "beehive" in contract.description.lower()
 
   def isFuelRounded(contract: Contract, roundingValue: int | None) -> bool:
     if not roundingValue:
@@ -80,5 +80,5 @@ def filter_functions(valkey_client: Valkey) -> dict[str, FilterFunction]:
     FilterFunctions.STRONT_HIGH: isStrontHigh,
     FilterFunctions.VALID_ALLIANCE: inAllowedAlliances,
     FilterFunctions.VALID_STATION: inValidStation,
-    FilterFunctions.IS_RORQ: isRorqContract,
+    FilterFunctions.IS_BEEHIVE: isBeehive,
   }

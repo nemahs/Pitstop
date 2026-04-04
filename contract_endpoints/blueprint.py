@@ -41,7 +41,7 @@ def get_outstanding_contracts(corp_id: CorporationID, sql: sa.Engine) -> list[Co
 
 class ValkeyFilter(BaseModel):
   name: FilterFunctions
-  type: Literal["Error", "Warning"]
+  type: Literal["Error", "Warning", "Info"]
   value: Any | None = None
 
 
@@ -80,7 +80,7 @@ def create_contract_blueprint(corp_id: CorporationID, valkey_host: str, esi: ESI
       for filter in filters:
         filter_name: FilterFunctions = filter.name
 
-        if all_filters[filter_name](contract, filter.value):
+        if not all_filters[filter_name](contract, filter.value):
           if filter.type == "Error":
             contract.errors.append(filter_name)
           else:
