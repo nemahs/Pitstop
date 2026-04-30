@@ -4,8 +4,8 @@ services:
     image: registry.nemahs.org/pitstop:latest
     secrets:
       - source: app.config
-        target: /app/prod.env
-      
+        target: /contracting/prod.env
+    
     environment:
       - ENVIRONMENT=prod
 
@@ -14,7 +14,7 @@ services:
       resources:
         limits:
           cpus: "2"
-          memory: "256M"
+          memory: "512M"
       labels:
         traefik.enable: "true"
         traefik.http.services.pitstop.loadbalancer.server.port: 80
@@ -83,7 +83,7 @@ services:
 
   migrate:
     image: registry.nemahs.org/pitstop:latest
-    entrypoint: ["uv", "run", "alembic", "upgrade", "head"]
+    entrypoint: ["uv", "run", "--frozen", "alembic", "upgrade", "head"]
     depends_on: 
       - postgres
 

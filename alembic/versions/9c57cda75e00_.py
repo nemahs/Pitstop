@@ -44,7 +44,7 @@ def upgrade() -> None:
     
     op.create_table("structures",
         sa.Column("id", sa.BigInteger, primary_key=True),
-        sa.Column("name", sa.String(100), unique=True)
+        sa.Column("name", sa.String(100), unique=False)
     )
 
     op.create_table("alliances",

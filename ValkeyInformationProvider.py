@@ -1,9 +1,10 @@
+import logging
+
 import valkey
 from flask import Flask
-from flask_principal import identity_loaded, RoleNeed, Identity
-from .auth import Permissions
+from flask_principal import Identity, RoleNeed, identity_loaded
 
-import logging
+from contracting.auth import Permissions
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

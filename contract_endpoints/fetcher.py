@@ -1,7 +1,6 @@
 import itertools
 import logging
 import time
-import traceback
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timedelta
 from typing import Final, cast
@@ -15,10 +14,11 @@ from valkey import Valkey, ValkeyError
 
 import database as db
 from contract_endpoints.dataclasses import ContractItems, ItemStatus, NamedItem
-from data.esi import ESI, ESIError, esi
-from data.esi.esi import get_bulk_names, get_structure_names
-from data.esi.typing import ContractID, CorporationID, EntityID, TypeID, make_character_id
-from data.typing import AccessToken, RefreshToken
+from contracting.data.esi import ESI, esi
+from contracting.data.esi.esi import get_bulk_names, get_structure_names
+from contracting.data.esi.typing import ContractID, CorporationID, EntityID, TypeID, make_character_id
+from contracting.data.typing import AccessToken, RefreshToken
+from data.esi.utils import ESIError
 
 from .typing import *
 
@@ -161,10 +161,9 @@ def pull_contracts(esi: ESI, corp_id: CorporationID, valkey_host: str, sql: sa.E
     except (DatabaseError, ValkeyError) as err:
       logger.error("%s during contract pull: %s", type(err).__name__, err)
       time.sleep(30)
-    # except err:
-    #   logger.error("Ran into an unknown error, waiting, then trying again. Error: %s", err)
-    #   traceback.print_exception(err)
-    #   time.sleep(30)
+    except Exception as err:
+      logger.error("Ran into an unknown error, waiting, then trying again. Type: %s Error: %s", type(err), err)
+      time.sleep(30)
 
 
 def aggregate_items(items: list[ESIItem]) -> list[ContractItems]:
@@ -207,7 +206,7 @@ def hydrate_alliances(session: so.Session, esi: ESI):
     db.ContractEntity.type == db.EntityType.CHARACTER).where(
       (db.ContractEntity.alliance == None) |
       (db.ContractEntity.updated_at == None) |
-       (datetime.now() - db.ContractEntity.updated_at > ALLIANCE_EXPIRATION)
+      (datetime.now() - db.ContractEntity.updated_at > ALLIANCE_EXPIRATION)
     )
 
   missing_alliances = session.scalars(get_alliances_to_update)

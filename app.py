@@ -1,7 +1,6 @@
 import json
 import logging
 import sys
-from warnings import filterwarnings
 
 sys.path += "."
 import os
@@ -25,22 +24,21 @@ from flask_vite import Vite
 from valkey import Valkey
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from contract_endpoints.blueprint import ValkeyFilter
-from data.esi.typing import CharacterID, make_character_id
-
-from .auth import AuthManager, User, admin_permissions
-from .config import ConfigFile
-from .contract_endpoints import (
+from auth import AuthManager, User, admin_permissions
+from config import ConfigFile
+from contract_endpoints import (
     create_contract_blueprint,
     get_outstanding_contracts,
     pull_contracts,
 )
-from .contract_endpoints.fetcher import get_key
-from .data.esi import ESI
-from .data.esi.auth import decode_token
-from .data.esi.corporation import open_corp_contract
-from .filters import create_filter_endpoints
-from .ValkeyInformationProvider import ValkeyInformationProvider
+from contract_endpoints.blueprint import ValkeyFilter
+from contract_endpoints.fetcher import get_key
+from data.esi import ESI
+from data.esi.auth import decode_token
+from data.esi.corporation import open_corp_contract
+from data.esi.typing import CharacterID, make_character_id
+from filters import create_filter_endpoints
+from ValkeyInformationProvider import ValkeyInformationProvider
 
 SECRET_KEY = "AFHFCHDSJCAS"
 INERTIA_TEMPLATE = "index.html"
@@ -89,7 +87,7 @@ else:
 def setup_app():
     global user_auth, provider, config, esi, corp_id, engine, valkey_client, valkey_host
     env_file = "develop.env" if app.config["DEBUG"] else "prod.env"
-
+    logger.info(f"Loading config from {env_file}")
     config = ConfigFile(_env_file=env_file, _env_file_encoding='utf-8') # pyright: ignore[reportCallIssue]
 
     valkey_host = config.VALKEY_HOST
@@ -105,7 +103,7 @@ def setup_app():
         target=pull_contracts,
         name="Puller Thread",
         args=(esi, corp_id, valkey_host, engine),
-        daemon=True,
+        daemon=False,
     )
 
     contracting_thread.start()

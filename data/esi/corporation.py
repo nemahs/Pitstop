@@ -88,8 +88,8 @@ def get_corp_contracts(_, corp_id: CorporationID, access_token: AccessToken) -> 
 
   contracts: list[ESIContract] = ContractList.validate_json(response.text)
 
-  remaining_pages = response.headers.get("x-pages")
-  logger.info("%d pages of contracts to fetch", remaining_pages)
+  remaining_pages = response.headers.get("x-pages", 0)
+  logger.info("%d pages of contracts to fetch", int(remaining_pages))
 
   if remaining_pages:
     for page in range(2, int(remaining_pages) + 1):
