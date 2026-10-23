@@ -4,9 +4,10 @@
     "python.analysis.typeCheckingMode": "standard",
     "python.analysis.typeEvaluation.strictDictionaryInference": true,
     "python.analysis.typeEvaluation.strictListInference": true,
-    "python.languageServer": "Pylance",
+    "python.languageServer": "Jedi",
     "python.analysis.extraPaths": [
         "../"
     ],
-    "python.testing.pytestPath": "uv run pytest"
+    "python.testing.pytestPath": "uv run pytest",
+    "python.terminal.activateEnvironment": false
 }
